@@ -1,1 +1,0 @@
-; See local V8 generator delivered in this conversation. This repository copy is the canonical V8 reference.
