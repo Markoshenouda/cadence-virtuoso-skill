@@ -1,14 +1,24 @@
-# Folded-Cascode OTA V8 Reference
+# Folded-Cascode OTA — Current Reference and Lessons
 
 ## Status
 
-The user's Cadence test reached the visually correct V8 routing behavior in the conversation on 2026-08-10. The exact downloadable source delivered in the conversation is:
+This document is now the persistent reference for the latest folded-cascode work. The repository skill was upgraded to include the complete specification-first workflow, clean routing rules, and verified `analogLib/vdc` bias-source workflow.
+
+The latest local generator revision produced in the conversation is:
+
+```text
+Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il
+```
+
+The previously verified clean routing reference is:
 
 ```text
 Folded_Cascode_OTA_NMOS_FINAL_V8_STRAIGHT.il
 ```
 
-The repository stores the complete V8 operating rules in `skills/folded-cascode-ota/SKILL.md` so future agents can reproduce the same architecture without rediscovering the debugging history.
+V8 is the routing reference; V9 is the latest topology-arrangement reference.
+
+---
 
 ## Verified environment
 
@@ -23,115 +33,254 @@ NMOS orientation: R0
 PMOS source-top orientation: MX
 ```
 
-## Verified schematic APIs
+---
+
+## Mandatory specification-first workflow
+
+Before generating a new folded-cascode `.il` file, ask for:
+
+```text
+Input pair
+PDK / technology
+VDD / VSS
+DC gain
+GBW
+CL
+Temperature
+Process corner
+Output type
+Bias strategy
+Power
+Slew rate
+ICMR
+Output swing
+gm/ID strategy
+L-selection strategy
+Layout-oriented sizing
+External pin names
+```
+
+Then confirm the design contract before writing SKILL.
+
+---
+
+## Current reference topology
+
+The desired visual distribution is:
+
+```text
+                         VDD
+                    ┌────┴────┐
+                   M3        M4
+                   │          │
+                   M5        M6
+                   │          │
+                   M7        M8
+                   │          │
+                   M9        M10
+                   │          │
+                  VSS        VSS
+
+          M1                 M2
+          │                   │
+          └──────── TAIL ─────┘
+                       │
+                      M11
+                       │
+                      VSS
+```
+
+Roles:
+
+```text
+M1/M2   = NMOS differential input pair
+M3/M4   = PMOS top pair
+M5/M6   = PMOS folded pair
+M7/M8   = NMOS folded pair
+M9/M10  = NMOS lower current sinks
+M11     = NMOS tail current source
+```
+
+Single-ended output:
+
+```text
+VOUT = right branch between M6 and M8
+```
+
+---
+
+## Reference logical net map
+
+```text
+M1.G -> VINP
+M1.D -> NLEFT
+M1.S -> TAIL
+M1.B -> VSS
+
+M2.G -> VINN
+M2.D -> NRIGHT
+M2.S -> TAIL
+M2.B -> VSS
+
+M3.G -> VBP2
+M3.D -> NLEFT
+M3.S -> VDD
+M3.B -> VDD
+
+M4.G -> VBP2
+M4.D -> NRIGHT
+M4.S -> VDD
+M4.B -> VDD
+
+M5.G -> VBP1
+M5.D -> FOLD_L
+M5.S -> NLEFT
+M5.B -> VDD
+
+M6.G -> VBP1
+M6.D -> VOUT
+M6.S -> NRIGHT
+M6.B -> VDD
+
+M7.G -> VBN1
+M7.D -> FOLD_L
+M7.S -> LEFT_SINK
+M7.B -> VSS
+
+M8.G -> VBN1
+M8.D -> VOUT
+M8.S -> RIGHT_SINK
+M8.B -> VSS
+
+M9.G -> VBN2
+M9.D -> LEFT_SINK
+M9.S -> VSS
+M9.B -> VSS
+
+M10.G -> VBN2
+M10.D -> RIGHT_SINK
+M10.S -> VSS
+M10.B -> VSS
+
+M11.G -> VBN2
+M11.D -> TAIL
+M11.S -> VSS
+M11.B -> VSS
+```
+
+Connectivity is logical by repeated labels. Terminal stubs remain physically isolated.
+
+---
+
+## Critical routing rule learned from V5–V8
+
+Every MOS terminal gets exactly one short straight stub:
+
+```text
+G -> stub -> NET
+B -> stub -> NET
+D -> stub -> NET
+S -> stub -> NET
+```
+
+Never physically connect two MOS terminals merely because they share a logical net.
+
+Forbidden unless the user explicitly requests a physical connection:
+
+```text
+G-D
+G-B
+D-B
+D-S
+S-B
+```
+
+No diagonal wires, loops around devices, wires through MOS bodies, overlapping stubs, or standalone internal wires.
+
+The terminal direction is determined from actual symbol geometry and orientation, never from whether the MOS is placed on the left or right side.
+
+---
+
+## Verified external pins
+
+Use:
 
 ```skill
-geGetEditCellView()
-dbOpenCellViewByType()
-dbCreateInst()
-cdfGetInstCDF()
-dbFindTermByName()
-centerBox()
-dbTransformPoint()
-schCreateWire()
-schCreateWireLabel()
-schCreatePin()
+dbOpenCellViewByType("basic" "iopin" "symbol" "" "r")
+schCreatePin(cv pinMaster netName direction nil point "R0")
 ```
 
-## Routing rule that fixed V8
+When requested, place the external pins in one clean vertical column in the exact user-specified order.
 
-Every MOS terminal is isolated:
+---
+
+## Verified VDC / bias-source workflow
+
+Source:
 
 ```text
-G -> one short straight stub -> NET
-B -> one short straight stub -> NET
-D -> one short straight stub -> NET
-S -> one short straight stub -> NET
+analogLib / vdc / symbol
 ```
 
-No terminal-to-terminal wires are generated. No wire is allowed to wrap around a MOS. No diagonal wire is allowed. No standalone internal-net wire is generated.
-
-For the verified symbol geometry:
-
-```text
-NMOS:       D
-            |
-        G --MOS-- B
-            |
-            S
-
-PMOS MX:    S
-            |
-        G --MOS-- B
-            |
-            D
-```
-
-The transistor's left/right placement never changes the terminal directions.
-
-## Connectivity rule
-
-If multiple terminals share a net, repeat the same net label on their separate stubs. Do not physically join the stubs.
-
-This rule prevents the previously observed:
-
-```text
-DB-270004: Illegal bus reference
-```
-
-errors and prevents accidental G-B, G-D, D-B, or other terminal shorts.
-
-## Internal-net rule
-
-Do not create decorative wires such as:
-
-```text
-NLEFT --------
-NRIGHT -------
-TAIL ---------
-```
-
-in empty schematic space. They produce floating-net warnings. Internal labels must exist only on actual terminal stubs.
-
-## VDC rule
-
-The verified `analogLib/vdc` instance has:
+Terminals:
 
 ```text
 PLUS
 MINUS
 ```
 
-with:
+Verified pin centers:
 
 ```text
-PLUS  center  = (0.0, 0.0)
-MINUS center  = (0.0, -0.375)
-CDF parameter = vdc
+PLUS  = (0.0, 0.0)
+MINUS = (0.0, -0.375)
 ```
 
-Set the source value through:
+The verified workflow is to place the source instance and then use its **instance CDF**:
 
 ```skill
 cdf = cdfGetInstCDF(inst)
 cdf->vdc->value = "1.5"
 ```
 
-Bias-source topology:
+Standard source arrangement:
 
 ```text
-BIAS_NET
-   |
- PLUS
-   |
- VDC
-   |
- MINUS
-   |
- VSS
+        BIAS_NET
+           |
+         PLUS
+           |
+        +------+
+        | VDC  |
+        |1.50V |
+        +------+
+           |
+         MINUS
+           |
+          VSS
 ```
 
-## Current folded-cascode design contract
+For VDD:
+
+```text
+PLUS  -> VDD
+MINUS -> VSS
+VDC   -> 1.5 V
+```
+
+For bias sources:
+
+```text
+PLUS  -> bias net
+MINUS -> VSS
+VDC   -> starting bias value
+```
+
+Do not physically connect a VDC pin to a MOS terminal. Use the same named-net architecture.
+
+---
+
+## Current design contract
 
 ```text
 Input pair       = NMOS
@@ -151,31 +300,96 @@ Power            = Auto
 Slew Rate        = Auto
 ICMR             = Auto
 Output Swing     = Auto
-Bias             = External bias pins
+Bias strategy    = External/generated bias sources as requested
 ```
 
-Initial DC values:
+Initial DC values used for testing:
 
 ```text
-VINP      = 0.75 V
-VINN      = 0.75 V
-VBP_FOLD  = 0.90 V
-VBN_CAS   = 0.75 V
-VBN_SINK  = 0.60 V
-VBN_TAIL  = 0.60 V
-VDD       = 1.50 V
-VSS       = 0 V
+VDD      = 1.50 V
+VSS      = 0 V
+VINP     = 0.75 V
+VINN     = 0.75 V
+VBP_FOLD = 0.90 V
+VBN_CAS  = 0.75 V
+VBN_SINK = 0.60 V
+VBN_TAIL = 0.60 V
 ```
 
-These are starting values and must be verified by operating-point simulation.
+These are starting values only.
 
-## Revision lessons
+---
 
-- V5: standalone internal label wires and poor routing.
-- V6: removed floating internal wires but still had terminal-routing problems.
-- V7: isolated-stub architecture introduced, but an argument-count bug and side-dependent routing remained.
-- V8: terminal direction is determined by the actual MOS symbol convention, not by the instance's left/right branch. All four terminals are independent straight stubs.
+## Sizing reference
 
-## Future-agent rule
+Latest V9 starting dimensions:
 
-When a new analog circuit is requested, first ask for the complete specification, confirm the design contract, then reuse the verified infrastructure and only change topology-specific device/net data.
+```text
+M1/M2   NMOS  4u / 240n
+M3/M4   PMOS  6u / 480n
+M5/M6   PMOS  6u / 480n
+M7/M8   NMOS  6u / 480n
+M9/M10  NMOS  6u / 480n
+M11     NMOS  6u / 480n
+NF=1
+M=1
+```
+
+These are engineering starting values, not proven gm/ID-optimal or performance-verified values.
+
+---
+
+## Revision history
+
+### V5
+VDC/internal-label experiments produced standalone internal wires and poor routing.
+
+### V6
+Standalone internal wires were removed, but terminal routing still produced unwanted geometry/connectivity.
+
+### V7
+Isolated terminal-stub architecture was introduced, but argument-count and side-dependent routing bugs remained.
+
+### V8
+Terminal direction was made independent of left/right placement. Every terminal became an independent straight stub; same-net connectivity became label-only.
+
+### V9
+The transistor distribution was reorganized to match the user's reference folded-cascode drawing: M3/M4 top, M5/M6 below, M7/M8 below, M9/M10 lower, M1/M2 input pair, M11 tail.
+
+---
+
+## Final future-agent rule
+
+For every new folded-cascode request:
+
+```text
+ASK SPECS
+  ↓
+CONFIRM DESIGN CONTRACT
+  ↓
+BUILD DEVICE/NET TABLE
+  ↓
+CHOOSE W/L/NF/M
+  ↓
+CHOOSE STARTING BIAS VALUES
+  ↓
+PLACE USING REFERENCE GEOMETRY
+  ↓
+ACTUAL PIN GEOMETRY
+  ↓
+ONE STRAIGHT ISOLATED STUB PER TERMINAL
+  ↓
+SAME NET LABELS FOR LOGICAL CONNECTIONS
+  ↓
+REAL EXTERNAL PINS
+  ↓
+analogLib/vdc SOURCES IF REQUESTED
+  ↓
+INSTANCE CDF vdc VALUES
+  ↓
+SAVE + CHECK
+  ↓
+DC OPERATING POINT
+  ↓
+ONLY THEN AC/TRANSIENT VERIFICATION
+```
