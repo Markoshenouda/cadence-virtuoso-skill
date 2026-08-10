@@ -2,13 +2,15 @@
 
 Reusable skill for generating Cadence Virtuoso IC6.1.7 schematics in the verified `tsmcN65` environment.
 
-## What is included
+## Included
 
 - `SKILL.md` — complete operating instructions for the AI agent.
 - `references/Cadence_SKILL_Design_Agent_Knowledge_Base.md` — detailed verified environment knowledge base.
-- `assets/generators/telescopic_ota_v4_pmos_pins.il` — final reference Telescopic OTA generator with PMOS `MX` orientation and real schematic pins.
-- `assets/runbooks/RUN_telescopic_ota_v4_pmos_pins.md` — exact run procedure.
-- Older V1/V2/V3 generator and runbook revisions for debugging/history.
+- `assets/generators/telescopic_ota_v4_pmos_pins.il` — final Telescopic OTA reference generator with PMOS `MX` orientation and real schematic pins.
+- `assets/runbooks/` — V1/V2/V3/V3.1/V3.2/V4 execution and debugging runbooks.
+- `.gitignore` — Cadence lock/temp/log exclusions.
+
+The working package used during development also contains earlier generator source revisions; the repository keeps the final reference generator and the revision/runbook documentation as the canonical starting point.
 
 ## Verified environment
 
@@ -23,6 +25,6 @@ Reusable skill for generating Cadence Virtuoso IC6.1.7 schematics in the verifie
 
 **Preserve the verified infrastructure. Change only topology-specific design data.**
 
-## Status
+## Agent behavior
 
-The package preserves the verified Cadence environment knowledge and the generator revisions developed during the project. It distinguishes verified runtime behavior from static/source knowledge and does not claim arbitrary future circuits have been tested.
+The skill enforces a test-first approach for new SKILL APIs, real transformed terminal coordinates, verified wire/label construction, real schematic pins through `basic/iopin/symbol`, and explicit separation of verified runtime behavior from untested assumptions.
