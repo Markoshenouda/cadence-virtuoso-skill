@@ -1,5 +1,7 @@
 # 5T OTA Skill
 
+Canonical latest test copy: [`../../canonical/5t-ota/5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il`](../../canonical/5t-ota/5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il). Historical generators are preserved in [`../../history/generators/`](../../history/generators/). The 2026-08-12 run validated PMOS S/D, VDC/pin policy, and schematic checks; its recorded B diagnostic still needs a clean G/B-horizontal rerun.
+
 Dedicated skill for the classic five-transistor CMOS OTA in Cadence Virtuoso IC6.1.7 / TSMC65.
 
 ## Topology

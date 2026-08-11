@@ -8,7 +8,7 @@ description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base fo
 
 ## Source of truth
 
-For new analog designs use:
+For new analog designs use (and consult the verification ledger before claiming a rule is verified):
 ```text
 skills/analog-design-agent/SKILL.md
 ```

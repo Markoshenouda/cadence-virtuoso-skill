@@ -1,262 +1,64 @@
 # Cadence Virtuoso SKILL Design Agent
 
-Reusable SKILL knowledge, design skills, reference generators, and runbooks for Cadence Virtuoso IC6.1.7 analog CMOS schematic automation in the verified `tsmcN65` environment.
+Repository for Cadence Virtuoso IC6.1.7 / `tsmcN65` schematic-generation skills, SKILL generators, references, tests, and runbooks.
 
-## Start here — Master Skill
+## Start here
 
-Use:
+| Purpose | Entry point | Status |
+|---|---|---|
+| Master rules | [`skills/analog-design-agent/SKILL.md`](skills/analog-design-agent/SKILL.md) | Current skill entry point |
+| Latest 5T artifact | [`canonical/5t-ota/5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il`](canonical/5t-ota/5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il) | Cadence-run test; see verification note below |
+| Latest Telescopic generator | [`canonical/telescopic-ota/telescopic_ota_v4_pmos_pins.il`](canonical/telescopic-ota/telescopic_ota_v4_pmos_pins.il) | Latest working version reported in the conversation; runbook says not executed in the actual session |
+| Folded Cascode skill | [`skills/folded-cascode-ota/SKILL.md`](skills/folded-cascode-ota/SKILL.md) | Skill/reference only |
+| Folded Cascode latest reference | [`canonical/folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md`](canonical/folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md) | V8 reference; no V9 `.il` was available |
 
-```text
-skills/analog-design-agent/SKILL.md
-```
-
-This is the **current master skill v3.0.0**. It is the source of truth for future analog schematic-generation requests.
-
-The master skill now requires the AI to:
-
-1. **Ask for all design specifications before coding.**
-2. Confirm a complete design contract.
-3. Reuse the verified Cadence infrastructure.
-4. Build an explicit device/net table.
-5. Generate clean isolated terminal stubs and named nets.
-6. Create real external schematic pins.
-7. Generate verified `analogLib/vdc` bias sources when requested.
-8. Set VDC values through the instance CDF `vdc` parameter.
-9. Validate before claiming success.
-
-## Current verified platform
+## Repository map
 
 ```text
-Cadence Virtuoso IC6.1.7
-PDK      = tsmcN65
-NMOS     = nch
-PMOS     = pch
-Terminals= S G B D
-CDF      = w l nf m
-NMOS     = R0
-PMOS     = MX when source-top/drain-bottom is required
+canonical/       Clearly named latest/candidate entry points
+history/         Copies of every preserved generator, test, and runbook
+skills/          Reusable AI/Cadence rules
+assets/          Original generator and runbook paths kept for compatibility
+references/      Topology and knowledge-base documents
+tests/           Cadence regression tests and validation evidence
+runbooks/        Stable execution guidance and commands
+output/examples/ Screenshots/examples; not executable generators
 ```
 
-## Critical schematic-routing rule
+Each area has an index README. The original paths remain intact so existing links and workflows keep working.
 
-Every MOS terminal is treated independently.
+## Verification ledger
 
-```text
-terminal -> short straight isolated stub -> net label
-```
+- **5T PMOS/VDC test, 2026-08-12:** the conversation records a successful Cadence load/run, `SCH-1426` schematic check with no errors, PMOS source-above-drain using actual transformed coordinates (`MY` passed, `MX` failed), VDC-driven nets without redundant external pins, isolated stubs, and explicit 0-V VSS source labels on both terminals.
+- **G/B direction:** the same recorded CIW output says `G -> RIGHT` and `B -> UP`. That conflicts with the intended rule that G/B are opposite horizontal directions. This repository records the rule as a required acceptance criterion, not as verified evidence from that run.
+- **Telescopic V4:** retained as the latest working generator reported in the conversation. Its runbook explicitly says the pin test/generator had not been executed in the actual Cadence session.
+- **Folded Cascode V8:** retained as a reference topology/skill. No executable V8/V9 `.il` was present in the repository or workspace, so none is invented here.
 
-If multiple terminals belong to the same logical net, repeat the same label. Do **not** physically connect the terminals merely to share a net.
+## Latest rules carried forward
 
-Forbidden unless explicitly requested:
+- Derive terminal direction from actual transformed pin geometry; do not use the instance bounding box as a direction proxy.
+- PMOS orientation is selected by checking actual transformed coordinates so `S.Y > D.Y`; do not assume `MX` universally.
+- G and B must be opposite horizontal directions; S and D must be opposite vertical directions. A generator must assert this, and the 2026-08-12 evidence still needs the B-direction rerun.
+- Use one short straight isolated stub per MOS terminal. Use repeated net labels for same-net connectivity instead of physical terminal-to-terminal wires.
+- VDC-driven nets do not receive redundant external pins. `VOUT` is the user-facing external-pin example.
+- A self-contained testbench may use an explicit `analogLib/vdc` at `0 V` with `VSS` labels on both `PLUS` and `MINUS`.
 
-```text
-G-D
-G-B
-D-B
-D-S
-S-B
-```
+## Run a generator
 
-Also forbidden:
-
-- diagonal wires
-- wires wrapping around MOS symbols
-- wires through MOS bodies
-- overlapping/crossing terminal stubs
-- standalone internal wires whose only purpose is to display a net name
-
-This architecture was established through the 5T OTA, Telescopic OTA, and Folded-Cascode debugging iterations.
-
-## Verified Voltage Source / Bias Source workflow
-
-The repository now treats voltage-source generation as part of the standard design skill.
-
-Verified source:
-
-```text
-Library = analogLib
-Cell    = vdc
-View    = symbol
-```
-
-Verified terminals:
-
-```text
-PLUS
-MINUS
-```
-
-Verified instance-CDF parameter:
-
-```text
-vdc
-```
-
-Set it with:
-
-```skill
-cdf = cdfGetInstCDF(inst)
-cdf->vdc->value = "1.5"
-```
-
-Standard bias structure:
-
-```text
-BIAS_NET
-   |
-  PLUS
-   |
-  VDC
-   |
- MINUS
-   |
-  VSS
-```
-
-For VDD:
-
-```text
-PLUS  -> VDD
-MINUS -> VSS
-VDC   -> 1.5 V
-```
-
-Bias values must be identified as user-specified, reference-derived, or engineering starting values. They are not final until DC operating-point verification supports them.
-
-## Specification-first workflow
-
-When the user says:
-
-> Make a folded cascode OTA
-
-or any other analog circuit, the AI must **not** immediately write SKILL.
-
-It must first ask for:
-
-```text
-Input pair
-PDK / node
-VDD / VSS
-Gain
-GBW
-CL
-Temperature
-Process corner
-Output type
-Bias strategy
-Power
-Slew rate
-ICMR
-Output swing
-gm/ID strategy
-L selection
-Layout-oriented sizing
-External pin names
-Other relevant requirements
-```
-
-Then confirm the design contract before generating the `.il`.
-
-## Reference designs
-
-### 5T OTA
-
-```text
-skills/5t-ota/SKILL.md
-```
-
-Includes both:
-
-- NMOS-input 5T OTA
-- PMOS-input 5T OTA
-
-with tested named-net/short-stub conventions.
-
-### Telescopic OTA
-
-```text
-assets/generators/telescopic_ota_v4_pmos_pins.il
-```
-
-This is the canonical tested Telescopic OTA reference. Reuse its low-level infrastructure rather than rewriting it.
-
-### Folded-Cascode OTA
-
-```text
-skills/folded-cascode-ota/SKILL.md
-```
-
-Current skill version: **2.0.0**.
-
-Reference topology:
-
-```text
-M3/M4   PMOS top pair
-M5/M6   PMOS folded pair
-M7/M8   NMOS folded pair
-M9/M10  NMOS lower sinks
-M1/M2   NMOS input pair
-M11     NMOS tail
-```
-
-Latest reference arrangement and biasing lessons are documented in:
-
-```text
-references/Folded_Cascode_OTA_V8_REFERENCE.md
-```
-
-## How to use this repository with another AI
-
-Tell it:
-
-> Use `skills/analog-design-agent/SKILL.md` as the master skill. Before generating any Cadence SKILL file, ask me for all required design specifications and confirm the design contract. Reuse the verified IC6.1.7/tsmcN65 infrastructure. Use actual MOS pin geometry, one short straight isolated stub per terminal, same net labels for logical connectivity, real external pins, and the verified analogLib/vdc instance-CDF bias-source workflow. Do not physically connect MOS terminals merely to share a net.
-
-For a folded-cascode request, also load:
-
-```text
-skills/folded-cascode-ota/SKILL.md
-```
-
-For 5T OTA work, also load:
-
-```text
-skills/5t-ota/SKILL.md
-```
-
-## Runtime workflow
-
-From Windows CMD:
+From Windows CMD, copy the selected `.il` file to Debian:
 
 ```cmd
-scp "C:\Users\marko\Desktop\your_file.il" cadence@192.168.75.216:/home/cadence/
+scp "C:\Users\marko\Desktop\your_file.il" cadence@192.168.75.217:/home/cadence/
 ```
 
-In Cadence CIW:
+In a new empty Cadence schematic, load it in CIW:
 
 ```skill
 load("/home/cadence/your_file.il")
 ```
 
-Then run the documented main procedure.
+Then use the exact procedure documented by its runbook. Never call an artifact “Cadence-verified” unless the verification evidence is recorded in `tests/` or its associated README.
 
-Always use a new/empty schematic for a generator test unless the generator explicitly supports modification of an existing design.
+## Missing local uploads
 
-## Debugging lessons preserved in the skills
-
-The repository records the major failures and their fixes:
-
-- `schCreateLabel` → use `schCreateWireLabel`.
-- `hiGetString` / `gets` → do not use them for this workflow.
-- `(pinName == "G")` → invalid approach; use valid SKILL branching/comparison.
-- `p + list(dx dy)` → use `car/cadr` scalar arithmetic.
-- standalone internal wires → remove; label actual terminal stubs.
-- physical G/B or G/D connections → isolate terminal stubs and repeat net labels.
-- side-dependent G/B routing → derive direction from actual symbol geometry/orientation.
-- stale CIW functions → use unique versioned entry points and reload the newest file.
-- new Cadence APIs → test them independently before integrating.
-
-## Quality gate
-
-A generated schematic is not declared simulation-ready merely because the SKILL procedure ran.
-
-Gain, GBW, slew rate, operating region, bias point, phase margin, DRC, LVS, and other performance claims require actual Cadence verification.
+The referenced workspace contained no additional `.il` uploads. In particular, the conversation named `Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il`, `5T_OTA_NMOS_V2_STRAIGHT_FIXED_20260812.il`, `5T_OTA_Generator_FINAL_V3.il`, and `5T_OTA_Generator_PMOS_INPUT_FINAL.il`; their exact contents were unavailable, so they are documented as gaps rather than recreated.

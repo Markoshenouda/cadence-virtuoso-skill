@@ -1,0 +1,102 @@
+/*
+ * telescopic_ota.il
+ * Cadence Virtuoso SKILL - parameterized Telescopic OTA generator
+ *
+ * IMPORTANT:
+ * 1) Edit the PDK configuration section before running.
+ * 2) This generator intentionally keeps PDK-specific master names in one place.
+ * 3) The topology is a single-ended-output telescopic OTA intended as a
+ *    high-gain starting point. Device sizes are starting values, not guaranteed
+ *    final tapeout values.
+ */
+
+(setq TO_PDK_LIB "YOUR_PDK_LIBRARY")
+(setq TO_NMOS_CELL "nmos")
+(setq TO_PMOS_CELL "pmos")
+(setq TO_DES_LIB "OTA_DESIGN")
+(setq TO_DES_CELL "telescopic_ota")
+(setq TO_DES_VIEW "schematic")
+(setq TO_VDD 1.2)
+(setq TO_VSS 0.0)
+(setq TO_LIN 0.36u)
+(setq TO_W_IN 12u)
+(setq TO_LCAS 0.50u)
+(setq TO_W_CAS 10u)
+(setq TO_LTAIL 0.50u)
+(setq TO_W_TAIL 16u)
+(setq TO_LPMOS 0.50u)
+(setq TO_W_PMOS 18u)
+
+procedure(TO_getMaster(lib cell view)
+  let((master)
+    master = dbOpenCellViewByType(lib cell view "r")
+    unless(master error("Cannot open master %s/%s/%s\n" lib cell view))
+    master
+  )
+)
+
+procedure(TO_inst(cv master name xy)
+  dbCreateInst(cv master name xy "R0")
+)
+
+procedure(TO_wire(cv p1 p2)
+  schCreateWire(cv "route" "full" list(p1 p2) 0.0625 0.0625 0)
+)
+
+procedure(TO_label(cv text xy)
+  schCreateWire(cv "label" "full" list(xy xy) 0.0625 0.0625 0)
+  schCreateNote(cv text xy "centerCenter" "R0" "stick" 0.15)
+)
+
+procedure(TO_setProp(inst propName propType propValue)
+  dbReplaceProp(inst propName propType propValue)
+)
+
+procedure(TO_createTelescopicOTA()
+  let((lib cv nmosMaster pmosMaster M1 M2 M3 M4 M5 M6 M7 M8 M9 VDD VSS VINP VINN VOUT BIASN BIASP)
+    printf("\n=== Telescopic OTA Generator ===\n")
+    lib = ddGetObj(TO_DES_LIB)
+    unless(lib error("Destination library %s does not exist. Create it first.\n" TO_DES_LIB))
+    cv = dbOpenCellViewByType(TO_DES_LIB TO_DES_CELL TO_DES_VIEW "schematic" "a")
+    unless(cv cv = dbOpenCellViewByType(TO_DES_LIB TO_DES_CELL TO_DES_VIEW "schematic" "w"))
+    unless(cv error("Cannot create/open %s/%s/%s\n" TO_DES_LIB TO_DES_CELL TO_DES_VIEW))
+    nmosMaster = TO_getMaster(TO_PDK_LIB TO_NMOS_CELL "symbol")
+    pmosMaster = TO_getMaster(TO_PDK_LIB TO_PMOS_CELL "symbol")
+    M1 = TO_inst(cv nmosMaster "M1" list(-300 -100))
+    M2 = TO_inst(cv nmosMaster "M2" list(300 -100))
+    M3 = TO_inst(cv nmosMaster "M3" list(-300 250))
+    M4 = TO_inst(cv nmosMaster "M4" list(300 250))
+    M5 = TO_inst(cv pmosMaster "M5" list(-300 600))
+    M6 = TO_inst(cv pmosMaster "M6" list(300 600))
+    M7 = TO_inst(cv pmosMaster "M7" list(-300 900))
+    M8 = TO_inst(cv pmosMaster "M8" list(300 900))
+    M9 = TO_inst(cv nmosMaster "M9" list(0 -450))
+    foreach(inst list(M1 M2) TO_setProp(inst "w" "float" TO_W_IN) TO_setProp(inst "l" "float" TO_LIN))
+    foreach(inst list(M3 M4) TO_setProp(inst "w" "float" TO_W_CAS) TO_setProp(inst "l" "float" TO_LCAS))
+    foreach(inst list(M5 M6 M7 M8) TO_setProp(inst "w" "float" TO_W_PMOS) TO_setProp(inst "l" "float" TO_LPMOS))
+    TO_setProp(M9 "w" "float" TO_W_TAIL)
+    TO_setProp(M9 "l" "float" TO_LTAIL)
+    VDD=list(0 1050) VSS=list(0 -600) VINP=list(-500 -100) VINN=list(500 -100) VOUT=list(500 600) BIASN=list(-600 250) BIASP=list(-600 750)
+    TO_wire(cv VINP list(-300 -100))
+    TO_wire(cv VINN list(300 -100))
+    TO_wire(cv list(-300 0) list(-300 250))
+    TO_wire(cv list(300 0) list(300 250))
+    TO_wire(cv list(-300 350) list(-300 600))
+    TO_wire(cv list(300 350) list(300 600))
+    TO_wire(cv list(300 500) VOUT)
+    TO_wire(cv list(0 -100) list(0 -450))
+    TO_wire(cv list(0 -500) VSS)
+    TO_wire(cv list(-300 1000) VDD)
+    TO_wire(cv list(300 1000) VDD)
+    TO_wire(cv BIASN list(-300 250))
+    TO_wire(cv BIASP list(-300 750))
+    TO_label(cv "VDD" VDD) TO_label(cv "VSS" VSS) TO_label(cv "VINP" VINP)
+    TO_label(cv "VINN" VINN) TO_label(cv "VOUT" VOUT) TO_label(cv "BIASN" BIASN) TO_label(cv "BIASP" BIASP)
+    schCheck(cv)
+    dbSave(cv)
+    printf("\nTelescopic OTA generated in %s/%s/%s\n" TO_DES_LIB TO_DES_CELL TO_DES_VIEW)
+    printf("Target: high DC gain using longer-channel cascode devices.\n")
+    printf("Next: connect/implement bias generation, then run DC/AC simulation.\n")
+    dbClose(cv)
+  )
+)

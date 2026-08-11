@@ -109,7 +109,7 @@ B ----- MOS ----- G
         D
 ```
 
-Therefore, in the tested reference orientation:
+Therefore, the required reference convention is:
 - G and B are opposite horizontal directions. If G is RIGHT, B is LEFT.
 - S and D are opposite vertical directions. For a source-top PMOS, S is UP and D is DOWN.
 
@@ -125,7 +125,7 @@ Instead:
 5. derive D direction from `(D - S)`;
 6. create exactly one straight stub along that direction.
 
-This keeps B opposite G even after orientation transforms.
+This is the required acceptance rule and must be asserted after transformation. The recorded 2026-08-12 CIW evidence printed `B -> UP`, so do not call the G/B horizontal rule verified until that diagnostic is rerun successfully.
 
 ## 7. PMOS source-top rule
 

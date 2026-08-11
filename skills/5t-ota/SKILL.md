@@ -86,7 +86,7 @@ Do NOT blindly assume `MX` is source-top. For every generated PMOS that must hav
 4. delete failing candidates and try the supported alternative;
 5. keep only the passing orientation.
 
-In the user's verified tsmcN65 test:
+In the user's recorded tsmcN65 test:
 ```text
 MX -> FAIL (S below D)
 MY -> PASS (S above D)
@@ -101,13 +101,13 @@ S direction = S - D
 D direction = D - S
 ```
 
-Therefore, in the tested symbol orientation:
+The required symbol convention is:
 ```text
 G -> RIGHT  => B -> LEFT
 S -> UP     => D -> DOWN
 ```
 
-The implementation must verify this relationship from coordinates.
+The implementation must assert this relationship from coordinates. Note: the recorded 2026-08-12 CIW diagnostic printed `B -> UP`, so the G/B horizontal relationship is an acceptance criterion awaiting a clean rerun, not a verified result of that log.
 
 ## 6. Mandatory isolated-stub routing
 

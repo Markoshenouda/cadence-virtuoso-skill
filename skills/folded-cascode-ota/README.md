@@ -1,5 +1,7 @@
 # Folded-Cascode OTA Skill
 
+Canonical available artifact: [`../../canonical/folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md`](../../canonical/folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md). No executable V8/V9 `.il` was available in the repository or workspace; the historical gap is intentional and documented rather than filled with invented code.
+
 This directory records the verified folded-cascode OTA workflow developed in the user's Cadence Virtuoso IC6.1.7 / TSMC65 environment.
 
 ## Current reference
