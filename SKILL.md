@@ -1,42 +1,33 @@
 ---
 name: cadence-virtuoso-skill
-version: 2.0.0
-description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base for analog schematic generation. Use the master spec-first skill for new designs.
+version: 2.1.0
+description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base for analog schematic generation.
 ---
 
 # Cadence Virtuoso IC6.1.7 — Verified SKILL Knowledge Base
 
 ## Source of truth
 
-For new analog designs, use:
-
+For new analog designs use:
 ```text
 skills/analog-design-agent/SKILL.md
 ```
-
-It contains the current **specification-first workflow**, verified construction APIs, named-net routing rules, real external pins, voltage-source generation, bias-source CDF handling, reference 5T/Telescopic/Folded-Cascode designs, and debugging lessons.
-
-For folded-cascode work also use:
-
+Circuit-specific skills:
 ```text
+skills/5t-ota/SKILL.md
 skills/folded-cascode-ota/SKILL.md
 ```
 
 ## Verified platform
-
 ```text
 Cadence Virtuoso IC6.1.7
-PDK library = tsmcN65
-NMOS = tsmcN65/nch/symbol
-PMOS = tsmcN65/pch/symbol
-MOS terminals = S G B D
-MOS CDF = w l nf m
-NMOS orientation = R0
-PMOS orientation = MX when source-top/drain-bottom is required
+tsmcN65
+nch / pch
+S G B D
+CDF: w l nf m
 ```
 
-## Verified APIs
-
+## Trusted APIs
 ```skill
 geGetEditCellView()
 dbOpenCellViewByType()
@@ -50,55 +41,60 @@ schCreateWireLabel()
 schCreatePin()
 ```
 
-Known failures:
+Do not use `schCreateLabel`, `hiGetString`, `gets`, C-style `(pinName == "G")`, or vector addition `p + list(dx dy)`.
 
-```skill
-schCreateLabel
-hiGetString
-gets
+## Verified terminal-direction rule
+
+The user's tested tsmcN65 symbol convention is:
+```text
+        S
+        |
+B ----- MOS ----- G
+        |
+        D
 ```
 
-Do not use C-style `(pinName == "G")` syntax.
-
-## Verified MOS CDF pattern
-
-```skill
-cdf = cdfGetInstCDF(inst)
-cdf->w->value  = W
-cdf->l->value  = L
-cdf->nf->value = NF
-cdf->m->value  = M
+Therefore:
+```text
+G and B are opposite horizontal directions.
+G RIGHT => B LEFT.
+S and D are opposite vertical directions.
+S UP    => D DOWN.
 ```
 
-## Verified terminal geometry
-
-```skill
-term = dbFindTermByName(inst~>master pinName)
-pin  = car(term~>pins)
-fig  = pin~>fig
-p    = dbTransformPoint(centerBox(fig~>bBox) inst~>transform)
+Implementation must derive this from actual transformed pin coordinates:
+```text
+G = G - B
+B = B - G
+S = S - D
+D = D - S
 ```
+Never infer terminal direction from left/right instance placement or `inst~>bBox` center.
 
-Never use vector addition such as:
+## PMOS source-top rule
 
-```skill
-p + list(dx dy)
+For any PMOS that must visually have source above drain:
+1. place a candidate orientation;
+2. read actual transformed S and D coordinates;
+3. require `S.Y > D.Y`;
+4. reject failing orientations and test the verified alternative.
+
+In the tested tsmcN65 environment:
+```text
+MX -> FAIL
+MY -> PASS
 ```
+Do not assume `MY` for another PDK; verify actual geometry again.
 
-Use scalar `car/cadr` arithmetic.
+## Mandatory named-net / isolated-stub routing
 
-## Mandatory schematic routing rule
-
-Every MOS S/G/D/B terminal is independent.
-
+Every MOS terminal is independent:
 ```text
 terminal -> short straight stub -> net label
 ```
 
-Same logical net = same label. Do not physically connect two MOS terminals merely because they share a net.
-
+Same logical net means the same label, not a physical terminal-to-terminal wire.
 Forbidden unless explicitly requested:
-
 ```text
 G-D
 G-B
@@ -106,187 +102,139 @@ D-B
 D-S
 S-B
 ```
-
-No diagonal wires, no loops around devices, no wires through MOS bodies, no overlapping terminal stubs, and no standalone internal wires used only to display a net name.
-
-Terminal direction must come from actual symbol geometry/orientation, never from whether the instance is placed left or right.
+Also forbidden: loops, diagonals, through-body wires, touching/overlapping stubs, and standalone wires used only to display a net name.
 
 ## Real external pins
 
 Use:
-
 ```skill
 dbOpenCellViewByType("basic" "iopin" "symbol" "" "r")
 schCreatePin(cv pinMaster netName direction nil point "R0")
 ```
 
-Pins must be real schematic pins.
+Only create pins for intentional user-facing external ports.
 
-## Verified voltage-source system
+### VDC-driven net rule
 
-The verified source is:
+If a net is driven by generated `analogLib/vdc`, do not also create a redundant external pin by default.
+```text
+VDD      -> VDC + label      -> no pin
+VBN_TAIL -> VDC + label      -> no pin
+VINP     -> VDC + label      -> no pin
+VINN     -> VDC + label      -> no pin
+VOUT     -> external pin
+```
+An explicit user request for both VDC and pin is an exception and should be confirmed.
+
+## Verified analogLib/vdc
 
 ```text
 Library = analogLib
-Cell    = vdc
-View    = symbol
+Cell = vdc
 Terminals = PLUS / MINUS
-```
-
-Verified pin centers:
-
-```text
 PLUS  = (0.0, 0.0)
 MINUS = (0.0, -0.375)
 ```
 
-After placing a VDC instance, obtain its **instance CDF**:
-
+After placing an instance:
 ```skill
 cdf = cdfGetInstCDF(inst)
-```
-
-Set the DC value with:
-
-```skill
 cdf->vdc->value = "1.5"
 ```
 
-Standard structure:
-
+Standard source:
 ```text
 BIAS_NET
    |
-  PLUS
+ PLUS
    |
-  VDC
+ VDC
    |
  MINUS
    |
-  VSS
+ VSS
 ```
+Use independent VDC and MOS stubs with repeated net labels. Do not physically wire them together.
 
-For VDD:
+### Explicit VSS reference source
 
+When a self-contained testbench needs an explicit VSS source, create:
 ```text
-PLUS  -> VDD
+PLUS  -> VSS
+VDC   = 0 V
 MINUS -> VSS
-VDC   -> 1.5 V
 ```
-
-For bias sources, PLUS receives the bias net name and MINUS receives VSS. Do not physically connect VDC pins to MOS terminals; use clean net labels/stubs.
+Both source terminals carry the `VSS` net label.
 
 ## Mandatory new-design workflow
 
 ```text
 1. Ask for all design specs.
-2. Ask for bias strategy and whether VDC sources are wanted.
-3. Confirm the design contract.
+2. Ask for bias strategy and VDC-vs-pin choice.
+3. Confirm the Design Contract.
 4. Decide/confirm topology.
 5. Build device/net table.
 6. Choose W/L/NF/M and identify their source.
-7. Choose starting bias values and identify their source.
-8. Place MOS devices.
-9. Get actual transformed pin coordinates.
-10. Create one short straight stub per terminal.
-11. Label every terminal net.
-12. Create real external pins.
-13. Create analogLib/vdc sources when requested.
-14. Set VDC values through instance CDF `vdc`.
-15. Save.
-16. Check and Save in Cadence.
-17. Verify DC operating point.
-18. Only then run AC/transient performance analysis.
+7. Choose initial bias values and identify their source.
+8. Place devices.
+9. Read actual transformed terminal coordinates.
+10. Verify PMOS S/D orientation if required.
+11. Derive G/B and S/D directions from actual terminal pairs.
+12. Create one straight isolated stub per terminal.
+13. Apply net labels.
+14. Classify nets and create only intentional real external pins.
+15. Create analogLib/vdc sources when requested.
+16. Set VDC values through instance CDF.
+17. Save.
+18. Check and Save in Cadence.
+19. Verify DC operating point.
+20. Only then run AC/transient performance tests.
 ```
 
 ## Reference dimensions
 
-### 5T NMOS input
-
+5T NMOS input:
 ```text
-M1/M2 = 2u / 240n
-M3/M4 = 4u / 480n
-M5    = 6u / 480n
+M1/M2 = 2u/240n
+M3/M4 = 4u/480n
+M5    = 6u/480n
 NF=1 M=1
 ```
 
-### 5T PMOS input
-
+5T PMOS input:
 ```text
-M1/M2 = 2u / 240n PMOS
-M3/M4 = 4u / 480n NMOS
-M5    = 6u / 480n PMOS
+M1/M2 = 2u/240n PMOS
+M3/M4 = 4u/480n NMOS
+M5    = 6u/480n PMOS
 NF=1 M=1
 ```
 
-### Telescopic reference
+These are starting/reference values only.
 
-```text
-M1/M2 = 2u / 240n
-M3/M4 = 4u / 480n
-M5/M6 = 4u / 480n
-M7/M8 = 6u / 480n
-M9    = 6u / 480n
-NF=1 M=1
-```
+## Debugging lessons
 
-These are starting/reference dimensions, not guaranteed performance results.
-
-## Current folded-cascode reference
-
-Use the dedicated skill for the full topology and bias details:
-
-```text
-skills/folded-cascode-ota/SKILL.md
-```
-
-Current reference arrangement:
-
-```text
-M3/M4   PMOS top pair
-M5/M6   PMOS folded pair
-M7/M8   NMOS folded pair
-M9/M10  NMOS lower sinks
-M1/M2   NMOS input pair
-M11     NMOS tail
-```
-
-Current starting bias values:
-
-```text
-VDD      = 1.50 V
-VSS      = 0 V
-VINP     = 0.75 V
-VINN     = 0.75 V
-VBP_FOLD = 0.90 V
-VBN_CAS  = 0.75 V
-VBN_SINK = 0.60 V
-VBN_TAIL = 0.60 V
-```
-
-## Debugging lessons preserved
-
-- `schCreateLabel` failed → use `schCreateWireLabel`.
-- `hiGetString` and `gets` failed → collect specifications in chat, not with those SKILL functions.
-- `(pinName == "G")` failed → use valid SKILL constructs.
-- vector addition failed → use `car/cadr` arithmetic.
-- standalone internal wires caused floating-net warnings → remove them.
-- physical terminal-to-terminal connections caused illegal bus/net errors → isolate every terminal and use same net labels.
-- side-dependent G/B routing caused wires to cross MOS symbols → derive direction from actual symbol geometry.
-- stale CIW definitions caused old functions to run → use unique revision names and reload the newest file.
-- test new APIs independently before integrating them.
+- `schCreateLabel` failed -> use `schCreateWireLabel`.
+- `hiGetString` / `gets` failed -> collect specifications in chat.
+- C-style equality failed -> use valid SKILL constructs.
+- vector addition failed -> use `car/cadr` arithmetic.
+- standalone internal wires caused floating warnings -> remove them.
+- physical terminal-to-terminal connections caused illegal net/bus errors -> isolate each terminal and use repeated labels.
+- side-dependent G/B routing caused crossing wires -> derive direction from actual transformed terminal pairs.
+- stale CIW definitions caused old functions -> use unique revision names and reload newest file.
+- new APIs must be tested in isolation before integration.
 
 ## Final principle
 
 ```text
 ASK FOR SPECS FIRST.
 PRESERVE VERIFIED INFRASTRUCTURE.
-USE ACTUAL PIN GEOMETRY.
-USE ISOLATED STRAIGHT STUBS.
-USE SAME NET LABELS FOR LOGICAL CONNECTIVITY.
-USE REAL EXTERNAL PINS.
-USE analogLib/vdc + PLUS/MINUS + instance-CDF vdc FOR BIAS SOURCES.
-DO NOT GUESS PDK DETAILS.
-CHANGE ONLY DESIGN-SPECIFIC DATA.
+USE ACTUAL TERMINAL GEOMETRY.
+MAKE G/B OPPOSITE AND S/D OPPOSITE FROM ACTUAL COORDINATES.
+VERIFY PMOS SOURCE-TOP / DRAIN-BOTTOM.
+USE ONE STRAIGHT ISOLATED STUB PER TERMINAL.
+USE NET LABELS FOR LOGICAL CONNECTIVITY.
+NO REDUNDANT PINS ON VDC-DRIVEN NETS.
+USE analogLib/vdc + PLUS/MINUS + instance-CDF vdc.
+USE EXPLICIT 0-V VSS SOURCE WHEN REQUESTED.
 VALIDATE BEFORE CLAIMING SUCCESS.
 ```
