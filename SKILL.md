@@ -1,7 +1,7 @@
 ---
 name: cadence-virtuoso-skill
-version: 2.2.0
-description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base for analog schematic generation with TotalW-first MOS sizing.
+version: 2.3.0
+description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base with a mandatory TotalW-first MOS sizing contract.
 ---
 
 # Cadence Virtuoso IC6.1.7 — Verified SKILL Knowledge Base
@@ -9,16 +9,13 @@ description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base fo
 ## Source of truth
 
 For new analog designs use:
-```text
-skills/analog-design-agent/SKILL.md
-```
-Circuit-specific skills:
-```text
-skills/5t-ota/SKILL.md
-skills/folded-cascode-ota/SKILL.md
-```
+- `skills/analog-design-agent/SKILL.md`
+- `skills/5t-ota/SKILL.md`
+- `skills/folded-cascode-ota/SKILL.md`
+- `references/TotalW_MOS_Sizing_Convention_20260812.md`
 
 ## Verified platform
+
 ```text
 Cadence Virtuoso IC6.1.7
 tsmcN65
@@ -26,25 +23,30 @@ nch / pch
 S G B D
 ```
 
-## TotalW-first MOS sizing — mandatory
+## Mandatory TotalW-first MOS contract
 
-The design-level width is always:
+The user/AI specifies:
 
 ```text
 TotalW
+L
+NF
+M
 ```
 
-For the verified tsmcN65 CDF:
+The user must never be asked for per-finger `W` as the design-level width.
+
+Verified tsmcN65 mapping:
 
 ```text
-TotalW -> wf       (total_width(M))
+TotalW -> wf
 L      -> l
 NF     -> fingers + nf
 M      -> simM + m
-W      -> explicit per-finger implementation width
+W      -> derived per-finger implementation width
 ```
 
-Every generated MOS must explicitly assign the complete state:
+The complete CDF state must always be assigned explicitly:
 
 ```skill
 cdf->w->value       = W_PER_FINGER
@@ -52,15 +54,79 @@ cdf->l->value       = L
 cdf->wf->value      = TOTAL_W
 cdf->fingers->value = NF
 cdf->simM->value    = M
+cdf->totalM->value  = NF * M
 cdf->nf->value      = NF
 cdf->m->value       = M
 ```
 
-After assignment, print and validate all fields. `wf` is the authoritative TotalW field.
+`totalM` is **not** `M`; it is `NF * M`.
 
-Do not use the old W-first interface in new generators. Historical artifacts keep their original convention and are not silently rewritten.
+No sizing field may rely on a default, stale instance value, or implicit callback.
+
+## Width derivation
+
+```text
+W_PER_FINGER = TotalW / NF
+WF           = TotalW
+```
+
+For SKILL generators, suffix-aware parsing may use the verified `cdfParseFloatString()` function. Never use unsafe `evalstring()` to parse user sizing strings.
+
+## Required sizing validation
+
+After every assignment, read back and validate:
+
+```text
+w, l, wf, fingers, simM, totalM, nf, m
+```
+
+Also validate:
+
+```text
+wf == TotalW
+totalM == fingers * simM
+fingers == NF
+nf == NF
+simM == M
+m == M
+```
+
+Generation must stop on mismatch.
+
+## Mandatory new-design workflow
+
+```text
+1. Ask all specs.
+2. Confirm Design Contract.
+3. Decide/confirm topology.
+4. Build device/net table.
+5. Choose TotalW/L/NF/M and identify their source.
+6. Derive W/finger internally.
+7. Place devices.
+8. Explicitly assign all eight CDF sizing fields.
+9. Validate the complete CDF sizing state.
+10. Read actual transformed terminal coordinates.
+11. Verify PMOS S/D orientation if required.
+12. Derive G/B and S/D directions.
+13. Create isolated stubs and labels.
+14. Create only intentional external pins.
+15. Create VDC sources when requested.
+16. Save.
+17. Check and Save in Cadence.
+18. Verify DC operating point.
+19. Only then run AC/transient performance tests.
+```
+
+## Geometry and routing rules
+
+- Derive terminal direction from actual transformed G/B/S/D coordinates.
+- For source-top PMOS require `S.Y > D.Y`; do not assume an orientation universally.
+- Use one short straight isolated stub per terminal.
+- Use repeated labels for logical connectivity instead of physical terminal-to-terminal wires.
+- Do not create redundant external pins on VDC-driven nets.
 
 ## Trusted APIs
+
 ```skill
 geGetEditCellView()
 dbOpenCellViewByType()
@@ -72,131 +138,22 @@ dbTransformPoint()
 schCreateWire()
 schCreateWireLabel()
 schCreatePin()
+cdfParseFloatString()
 ```
 
-Do not use `schCreateLabel`, `hiGetString`, `gets`, C-style `(pinName == "G")`, or vector addition `p + list(dx dy)`.
+Avoid `schCreateLabel`, `hiGetString`, `gets`, C-style comparisons, vector point addition, and unsafe `evalstring()` for sizing parsing.
 
-## Verified terminal-direction rule
+## Legacy policy
 
-The tested tsmcN65 symbol convention is:
-```text
-        S
-        |
-B ----- MOS ----- G
-        |
-        D
-```
-
-Implementation must derive this from actual transformed pin coordinates:
-```text
-G = G - B
-B = B - G
-S = S - D
-D = D - S
-```
-
-Never infer terminal direction from instance placement or `inst~>bBox` center.
-
-## PMOS source-top rule
-
-For any PMOS that must have source above drain:
-1. place a candidate orientation;
-2. read actual transformed S and D coordinates;
-3. require `S.Y > D.Y`;
-4. reject failing orientations and test alternatives.
-
-The recorded tsmcN65 test found:
-```text
-MX -> FAIL
-MY -> PASS
-```
-Do not assume `MY` for another PDK.
-
-## Mandatory isolated-stub routing
-
-Every MOS terminal is independent:
-```text
-terminal -> short straight stub -> net label
-```
-
-Same logical net means the same label, not a physical terminal-to-terminal wire. Forbidden unless explicitly requested: G-D, G-B, D-B, D-S, S-B physical connections; loops; diagonals; through-body wires; touching/overlapping stubs; standalone wires used only to display a net name.
-
-## Real external pins
-
-Use:
-```skill
-dbOpenCellViewByType("basic" "iopin" "symbol" "" "r")
-schCreatePin(cv pinMaster netName direction nil point "R0")
-```
-
-Only create intentional user-facing external ports. VDC-driven nets do not get redundant pins by default.
-
-## Verified analogLib/vdc
-
-```text
-Library = analogLib
-Cell = vdc
-Terminals = PLUS / MINUS
-PLUS  = (0.0, 0.0)
-MINUS = (0.0, -0.375)
-```
-
-Set source voltage through instance CDF `vdc`. Use independent VDC and MOS stubs with repeated labels. For an explicit VSS reference source, use 0 V with both terminals labeled VSS.
-
-## Mandatory new-design workflow
-
-```text
-1. Ask for all specs.
-2. Ask for bias strategy and VDC-vs-pin choice.
-3. Confirm the Design Contract.
-4. Decide/confirm topology.
-5. Build device/net table.
-6. Choose TotalW/L/NF/M and identify their source.
-7. Derive W/finger in the sizing layer.
-8. Place devices.
-9. Explicitly assign W/L/WF/fingers/simM/nf/m.
-10. Validate the complete CDF sizing state.
-11. Read actual transformed terminal coordinates.
-12. Verify PMOS S/D orientation if required.
-13. Derive G/B and S/D directions.
-14. Create isolated stubs and labels.
-15. Create only intentional external pins.
-16. Create VDC sources when requested.
-17. Save.
-18. Check and Save in Cadence.
-19. Verify DC operating point.
-20. Only then run AC/transient performance tests.
-```
-
-## Reference dimensions
-
-5T NMOS input:
-```text
-M1/M2 = TotalW 2u / L 240n / NF 1 / M 1
-M3/M4 = TotalW 4u / L 480n / NF 1 / M 1
-M5    = TotalW 6u / L 480n / NF 1 / M 1
-```
-
-5T PMOS-input reference:
-```text
-M1/M2 = TotalW 2u / L 240n / NF 1 / M 1
-M3/M4 = TotalW 4u / L 480n / NF 1 / M 1
-M5    = TotalW 6u / L 480n / NF 1 / M 1
-```
-
-These are starting/reference values only.
+Historical W-first artifacts remain unchanged and are evidence only. Current canonical generators and skills must use TotalW-first sizing. Compatibility copies under `assets/` are not canonical unless explicitly marked current.
 
 ## Final principle
 
 ```text
 ASK FOR SPECS FIRST.
 USE TOTALW AS THE DESIGN-LEVEL WIDTH.
-EXPLICITLY ASSIGN W, L, WF, M, NF AND THE VERIFIED tsmcN65 MIRROR FIELDS.
-KEEP WF AS THE AUTHORITATIVE TOTAL-WIDTH FIELD.
-USE ACTUAL TERMINAL GEOMETRY.
-VERIFY PMOS SOURCE-TOP / DRAIN-BOTTOM.
-USE ONE STRAIGHT ISOLATED STUB PER TERMINAL.
-USE NET LABELS FOR LOGICAL CONNECTIVITY.
-NO REDUNDANT PINS ON VDC-DRIVEN NETS.
+DERIVE W/FINGER INTERNALLY.
+EXPLICITLY ASSIGN W, L, WF, FINGERS, SIMM, TOTALM, NF, M.
+ENFORCE totalM = NF * M.
 VALIDATE BEFORE CLAIMING SUCCESS.
 ```
