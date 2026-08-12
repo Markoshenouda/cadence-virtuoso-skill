@@ -5,7 +5,7 @@ Runbooks contain exact copy, load, and run commands. Versioned historical origin
 ## Current post-migration entry points
 
 - `RUN_5T_OTA_TOTALW_V2_20260812.md`
-- `RUN_telescopic_ota_totalw_v2_20260812.md`
+- `RUN_telescopic_ota_v7_20260812.md` — canonical Telescopic flow, including SCP/load/run commands.
 
 Both use the repository-wide design-level interface:
 

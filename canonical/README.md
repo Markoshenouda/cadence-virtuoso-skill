@@ -23,7 +23,7 @@ totalM = NF * M
 | Family | Canonical artifact | Status |
 |---|---|---|
 | 5T OTA | `5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; requires Cadence re-run after migration |
-| Telescopic OTA | `telescopic-ota/telescopic_ota_totalw_v2_20260812.il` | Current TotalW-first generator; preserves actual M4.D VOUT endpoint logic |
+| Telescopic OTA | `telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il` | Canonical; schematic generation and Check & Save verified on 2026-08-12; performance not verified |
 | Folded Cascode OTA | `folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md` | Reference only; executable remains legacy until a TotalW version is Cadence-verified |
 
 ## Verification policy
@@ -37,3 +37,5 @@ tests/mos-sizing/TotalW_CDF_Assignment_Complete_Test_V5_20260812.il
 ```
 
 which verifies explicit W/L/WF/NF/M assignment and `totalM = fingers * simM`.
+
+Superseded Telescopic TotalW V1/V2 artifacts are retained under `history/generators/`; they are not canonical entry points.
