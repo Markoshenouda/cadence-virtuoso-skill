@@ -1,7 +1,7 @@
 ---
 name: cadence-virtuoso-skill
-version: 2.3.0
-description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base with a mandatory TotalW-first MOS sizing contract.
+version: 4.0.0
+description: Specification-first Cadence Virtuoso operating system with TotalW-first sizing, VDC bias, and verified Telescopic OTA V7 reference.
 ---
 
 # Cadence Virtuoso IC6.1.7 — Verified SKILL Knowledge Base
@@ -10,6 +10,8 @@ description: Verified Cadence Virtuoso IC6.1.7 / tsmcN65 SKILL knowledge base wi
 
 For new analog designs use:
 - `skills/analog-design-agent/SKILL.md`
+- `references/design-contract.md`
+- `references/repository-authority-map.md`
 - `skills/5t-ota/SKILL.md`
 - `skills/folded-cascode-ota/SKILL.md`
 - `references/TotalW_MOS_Sizing_Convention_20260812.md`
@@ -124,6 +126,7 @@ Generation must stop on mismatch.
 - Use one short straight isolated stub per terminal.
 - Use repeated labels for logical connectivity instead of physical terminal-to-terminal wires.
 - Do not create redundant external pins on VDC-driven nets.
+- Every generated-artifact response must contain SCP, `load()`, and exact execution commands.
 
 ## Trusted APIs
 
@@ -146,6 +149,8 @@ Avoid `schCreateLabel`, `hiGetString`, `gets`, C-style comparisons, vector point
 ## Legacy policy
 
 Historical W-first artifacts remain unchanged and are evidence only. Current canonical generators and skills must use TotalW-first sizing. Compatibility copies under `assets/` are not canonical unless explicitly marked current.
+
+The Telescopic OTA V7 artifact is the canonical schematic-generation reference. V1/V2 and compatibility V1–V4 are preserved as history and must not be used as current implementations.
 
 ## Final principle
 

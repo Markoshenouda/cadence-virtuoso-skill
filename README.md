@@ -6,11 +6,12 @@ Repository for Cadence Virtuoso IC6.1.7 / `tsmcN65` schematic-generation skills,
 
 | Purpose | Entry point | Status |
 |---|---|---|
-| Master rules | `skills/analog-design-agent/SKILL.md` | Current TotalW-first skill v3.3 |
+| Master rules | `skills/analog-design-agent/SKILL.md` | Current specification-first operating protocol |
+| Authority map | `references/repository-authority-map.md` | Definitive conflict and artifact-status ledger |
 | MOS sizing contract | `references/TotalW_MOS_Sizing_Convention_20260812.md` | Current verified convention |
 | Golden sizing regression | `tests/mos-sizing/TotalW_CDF_Assignment_Complete_Test_V5_20260812.il` | Cadence-verified on 2026-08-12 |
 | Latest 5T artifact | `canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; re-run required after migration |
-| Latest Telescopic artifact | `canonical/telescopic-ota/telescopic_ota_totalw_v2_20260812.il` | Current TotalW-first generator; preserves actual M4.D VOUT endpoint |
+| Canonical Telescopic artifact | `canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il` | Cadence schematic-generation verified; VDC bias and real differential output pins |
 | Folded Cascode skill | `skills/folded-cascode-ota/SKILL.md` | Current TotalW-first skill |
 | Folded Cascode executable | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il` | Legacy/reference until TotalW migration is Cadence-verified |
 
@@ -56,7 +57,7 @@ Every MOS must explicitly assign `w`, `l`, `wf`, `fingers`, `simM`, `totalM`, `n
 
 - **TotalW CDF regression V5, 2026-08-12:** successfully executed in the user's live Cadence IC6.1.7 / tsmcN65 environment. The test verified multiple NF/M combinations and `totalM = fingers * simM` after save.
 - **5T PMOS/VDC test, 2026-08-12:** previous successful Cadence run remains recorded in the historical verification material.
-- **Telescopic VOUT:** current generator keeps `M2.D`/`M4.D` on `VOUT` and creates the external VOUT pin at the actual M4.D stub endpoint.
+- **Telescopic V7, 2026-08-12:** CIW evidence records `SCH-1426` with no schematic-check errors and `SCH-1181` save. V7 is canonical for schematic generation only; operating point and performance remain unverified.
 - **Historical artifacts:** old W-first generators remain preserved and are not presented as current TotalW generators.
 
 ## Run a generator
@@ -74,3 +75,5 @@ load("/home/cadence/your_file.il")
 ```
 
 Then run the exact procedure documented by the corresponding runbook. Do not call a generator Cadence-verified until the live run is recorded.
+
+For Telescopic V7 use [the V7 runbook](runbooks/RUN_telescopic_ota_v7_20260812.md). New designs follow: specification extraction → missing-spec questions → design confirmation → sizing → sizing confirmation → one-shot generator → Cadence execution → verification → canonical promotion.

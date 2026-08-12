@@ -1,7 +1,7 @@
 ---
 name: cadence-analog-design-agent
-version: 3.3.0
-description: Spec-first Cadence Virtuoso IC6.1.7 analog schematic-generation skill for verified tsmcN65 with TotalW-first MOS sizing, explicit complete CDF assignment, geometry-verified terminals, isolated stubs, and VDC policy.
+version: 4.0.0
+description: Master operating protocol for specification-first Cadence Virtuoso generation, TotalW-first sizing, local-stub routing, VDC bias, and evidence-based promotion.
 ---
 
 # Cadence Analog Design Agent — Master Skill v3.3
@@ -11,6 +11,8 @@ description: Spec-first Cadence Virtuoso IC6.1.7 analog schematic-generation ski
 Use this skill for every analog CMOS schematic-generation request in the user's verified Cadence environment.
 
 Golden rule: ask for all design specifications, confirm the Design Contract, then generate the `.il` file.
+
+The required operating sequence is: specification extraction -> missing-spec questions -> confirmed design summary -> confirmed TotalW/L/NF/M sizing -> one complete generator -> Cadence execution -> verification -> canonical promotion. Follow `../../references/design-contract.md` and resolve conflicts with `../../references/repository-authority-map.md`.
 
 ## 1. Mandatory specification interview
 
@@ -190,3 +192,7 @@ Before delivery verify device count/masters, TotalW/L/NF/M, all eight CDF fields
 ## 12. Legacy policy
 
 Historical W-first artifacts remain unchanged as historical evidence. Current canonical generators must use TotalW-first sizing. Compatibility copies under `assets/` are not canonical unless explicitly marked current.
+
+## Mandatory artifact handoff
+
+Every generated artifact response includes the local filename, Windows SCP command, Cadence `load()` command, exact generator invocation, empty-schematic prerequisite, expected CIW markers, Check and Save instruction, and request for CIW output plus screenshot. Use only terminal -> local stub -> net label routing; never create device-to-device wires. Use `analogLib/vdc` for internally generated supply, bias, and DC input sources. Place real output pins at their actual drain-stub endpoints. The canonical Telescopic reference is V7; do not present V1/V2 or compatibility V1–V4 as current.

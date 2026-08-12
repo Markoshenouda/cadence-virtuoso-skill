@@ -22,6 +22,8 @@ The user executed V5 successfully on 2026-08-12 and obtained `COMPLETE TOTALW RE
 
 ## Existing circuit tests
 
+`test_telescopic_ota_v7_contract.py` protects the canonical V7 repository contract. `telescopic-ota-v7-regression.md` records the live Cadence checks still required for a fresh run.
+
 The existing 5T PMOS/VDC regression remains preserved as circuit-level evidence. Its documented PMOS geometry and VDC/pin checks are separate from the MOS sizing contract.
 
 ## Evidence policy
