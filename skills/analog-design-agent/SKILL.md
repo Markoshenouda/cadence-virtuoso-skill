@@ -1,20 +1,19 @@
 ---
 name: cadence-analog-design-agent
-version: 3.1.0
-description: Spec-first Cadence Virtuoso IC6.1.7 analog schematic-generation skill for the verified tsmcN65 environment, with tested source-top PMOS orientation, opposite G/B directions, isolated named stubs, and VDC-driven net pin policy.
+version: 3.2.0
+description: Spec-first Cadence Virtuoso IC6.1.7 analog schematic-generation skill for verified tsmcN65, with geometry-verified terminals, isolated named stubs, VDC-driven net policy, and TotalW-first MOS sizing.
 ---
 
-# Cadence Analog Design Agent — Master Skill v3.1
+# Cadence Analog Design Agent — Master Skill v3.2
 
 ## 0. Mission
 
 Use this skill for every analog CMOS schematic-generation request in the user's verified Cadence Virtuoso environment.
 
 ### Golden rule
-
 > ASK FOR ALL DESIGN SPECS FIRST. CONFIRM THE DESIGN CONTRACT. ONLY THEN GENERATE THE `.il` FILE.
 
-Preserve the verified low-level infrastructure. Change only topology-specific design data.
+Preserve verified low-level infrastructure. Change only topology-specific design data.
 
 ## 1. Mandatory specification interview
 
@@ -45,10 +44,89 @@ PDK      = tsmcN65
 NMOS     = tsmcN65/nch/symbol
 PMOS     = tsmcN65/pch/symbol
 Terminals= S G B D
-CDF      = w l nf m
 ```
 
-## 4. Trusted SKILL APIs
+### Verified tsmcN65 MOS CDF naming
+
+Live CIW inspection on 2026-08-12 established:
+
+```text
+w        -> w (M)
+wf       -> total_width(M)       <-- TotalW design parameter
+after live CDF inspection:
+l        -> l (M)
+fingers  -> Number of Fingers
+simM     -> Multiplier
+nf       -> Nf
+m        -> m / iPar("simM")
+```
+
+The design-level interface is **TotalW**, not per-finger W.
+
+## 4. TotalW-first MOS sizing — MANDATORY
+
+Every new generator must specify each MOS at design level with:
+
+```text
+TotalW
+L
+NF
+M
+```
+
+Never ask the user for per-finger W when TotalW is the intended design quantity.
+
+### Verified PDK mapping
+
+```text
+TotalW -> wf
+L      -> l
+NF     -> fingers / nf
+M      -> simM / m
+```
+
+`w` is the per-finger physical width and is an implementation parameter.
+
+### Explicit assignment policy
+
+For every MOS, do not rely on stale/default PCell state. Explicitly assign the complete sizing state:
+
+```skill
+cdf->w->value       = W_PER_FINGER
+cdf->l->value       = L
+cdf->wf->value      = TOTAL_W
+cdf->fingers->value = NF
+cdf->simM->value    = M
+cdf->nf->value      = NF
+cdf->m->value       = M
+```
+
+`W_PER_FINGER` is produced by the sizing layer from the TotalW design value and the selected NF. The PDK's `wf` field is the authoritative total-width field. Never silently substitute a different width convention.
+
+### Required logging
+
+Every generator should print:
+
+```text
+M1 TotalW=... L=... NF=... M=... W/finger=... wf=... fingers=... simM=...
+```
+
+### Required validation
+
+After assignment, verify that `wf`, `l`, `fingers`, `simM`, `nf`, `m`, and `w` match the intended state. If any field does not match, stop generation and report the mismatch.
+
+### Critical distinction
+
+```text
+TotalW = wf = design-level total width
+W      = w  = per-finger physical width
+NF     = fingers
+M      = simM
+```
+
+The AI reasons in TotalW. Cadence receives the complete explicit CDF state.
+
+## 5. Trusted SKILL APIs
 
 ```skill
 geGetEditCellView()
@@ -70,36 +148,23 @@ hiGetString
 gets
 ```
 
-Never use C-style comparison expressions such as `(pinName == "G")`. Use valid SKILL constructs such as `equal`, `case`, `if`, and `cond`.
-
+Never use C-style comparison expressions such as `(pinName == "G")`. Use `equal`, `case`, `if`, or `cond`.
 Never use vector point addition such as `p + list(dx dy)`; use scalar `car/cadr` arithmetic.
-
 If a genuinely new Cadence API is required, test it in an isolated schematic first and only integrate it after it works.
 
-## 5. MOS creation and CDF sizing
+## 6. MOS creation API
 
-Use the verified instance-CDF pattern:
+Use a TotalW-first interface for all new generators:
 
 ```skill
-procedure(SetMOS(inst W L NF M)
-    let((cdf)
-        cdf = cdfGetInstCDF(inst)
-        unless(cdf error("Cannot access instance CDF.\n"))
-        cdf->w->value  = W
-        cdf->l->value  = L
-        cdf->nf->value = NF
-        cdf->m->value  = M
-    )
-)
+procedure(PlaceMOS(cv master name xy TotalW L NF M orient)
 ```
 
-Do not guess CDF field names in the verified platform.
+New generators must not expose the old `PlaceMOS(... W L NF M ...)` interface.
 
-## 6. VERIFIED MOS terminal-direction model
+## 7. VERIFIED MOS terminal-direction model
 
-This rule is based on a working Cadence test using the actual transformed terminal coordinates.
-
-The desired visual symbol convention is:
+Use actual transformed terminal coordinates.
 
 ```text
         S
@@ -109,48 +174,31 @@ B ----- MOS ----- G
         D
 ```
 
-Therefore, the required reference convention is:
-- G and B are opposite horizontal directions. If G is RIGHT, B is LEFT.
-- S and D are opposite vertical directions. For a source-top PMOS, S is UP and D is DOWN.
+G/B must be opposite directions; S/D must be opposite directions. For source-top PMOS, require `S.Y > D.Y`.
 
-### Mandatory implementation rule
+Mandatory implementation:
+1. get actual transformed G/B/S/D with `dbFindTermByName` + `centerBox` + `dbTransformPoint`;
+2. derive each direction from the corresponding terminal pair;
+3. create exactly one straight stub along that direction;
+4. assert the geometry after transformation.
 
-Do NOT infer terminal direction from left/right placement or from `inst~>bBox` center.
+Do not infer terminal direction from placement or bounding-box center.
 
-Instead:
-1. obtain the actual transformed coordinates of G, B, S, and D with `dbFindTermByName` + `centerBox` + `dbTransformPoint`;
-2. derive G direction from `(G - B)`;
-3. derive B direction from `(B - G)`;
-4. derive S direction from `(S - D)`;
-5. derive D direction from `(D - S)`;
-6. create exactly one straight stub along that direction.
+## 8. PMOS source-top rule
 
-This is the required acceptance rule and must be asserted after transformation. The recorded 2026-08-12 CIW evidence printed `B -> UP`, so do not call the G/B horizontal rule verified until that diagnostic is rerun successfully.
-
-## 7. PMOS source-top rule
-
-Do not blindly assume `MX` is the correct PMOS orientation.
-
-For every design in which PMOS must be source-top/drain-bottom:
-1. place a PMOS candidate orientation;
-2. read actual transformed S and D coordinates;
+For every design requiring source-top/drain-bottom PMOS:
+1. place a candidate orientation;
+2. read actual transformed S/D coordinates;
 3. require `S.Y > D.Y`;
-4. if the condition fails, delete the candidate and test the verified alternate orientation;
-5. use only the orientation that passes the actual geometry check.
+4. delete failed candidates;
+5. use only the orientation that passes actual geometry verification.
 
-In the user's verified tsmcN65 test, `MX` failed and `MY` passed:
-```text
-MX: S below D  -> FAIL
-MY: S above D  -> PASS
-```
+Do not treat `MX` or `MY` as universally correct across PDKs.
 
-Do not treat the string `MY` as universally correct for another PDK; verify actual geometry again when the PDK/device changes.
-
-## 8. Actual terminal geometry
+## 9. Actual terminal geometry
 
 Never hard-code transistor pin coordinates.
 
-Use:
 ```skill
 term = dbFindTermByName(inst~>master pinName)
 pin  = car(term~>pins)
@@ -158,185 +206,90 @@ fig  = pin~>fig
 p    = dbTransformPoint(centerBox(fig~>bBox) inst~>transform)
 ```
 
-## 9. Critical named-net / isolated-stub architecture
+## 10. Isolated-stub architecture
 
-Every MOS S/G/D/B terminal is independent.
+Every MOS S/G/D/B terminal is independent. Shared logical nets use separate stubs with repeated labels. Never physically connect MOS terminals merely because they share a logical net.
 
-For a shared logical net:
-```text
-terminal 1 -> short straight stub -> NET
-terminal 2 -> short straight stub -> NET
-```
+Forbidden: looping wires, diagonal wires, wires through MOS bodies, wires crossing symbols, touching/overlapping stubs, and standalone floating internal wires.
 
-Never physically connect two MOS terminals just because they share a net. This includes G-D, G-B, D-B, D-S, and S-B unless the user explicitly requests a physical wire.
+## 11. Real external pins
 
-M3 diode connection example:
-```text
-M3.G -> MIRROR
-M3.D -> MIRROR
-```
-with two separate, non-touching stubs.
+Use `basic/iopin` with `schCreatePin`. VDC-driven nets do not receive redundant external pins by default.
 
-Forbidden:
-- looping wires
-- diagonal wires
-- wires through MOS bodies
-- wires crossing symbols
-- touching/overlapping stubs
-- standalone internal wires whose only purpose is to show a net name
+## 12. analogLib/vdc bias-source system
 
-Logical connectivity is created by repeated net labels on the isolated stubs.
+Use `analogLib/vdc`, PLUS/MINUS, isolated stubs, labels, and instance CDF `vdc`. Do not physically wire a VDC terminal directly into a MOS terminal.
 
-## 10. Real external pins
+For explicit VSS reference sources, use 0 V and VSS labels on both terminals.
 
-Use:
-```skill
-dbOpenCellViewByType("basic" "iopin" "symbol" "" "r")
-schCreatePin(cv pinMaster netName direction nil point "R0")
-```
-
-Directions used successfully include `input`, `output`, and `inputOutput`.
-
-### VDC-driven net rule
-
-A net driven by a generated `analogLib/vdc` source must NOT receive a redundant external pin by default.
-
-Classification:
-1. VDC-driven net -> VDC + isolated stubs + net label, NO external pin.
-2. User-facing signal/control not internally driven -> real external pin.
-3. Internal-only net -> net labels only, NO external pin.
-4. If the user explicitly requests both a VDC source and an external pin on the same net, confirm before generating it.
-
-Typical self-contained OTA testbench:
-```text
-VDD      -> VDC + VDD label      -> NO PIN
-VBN_TAIL -> VDC + VBN_TAIL label -> NO PIN
-VINP     -> VDC + VINP label     -> NO PIN
-VINN     -> VDC + VINN label     -> NO PIN
-VOUT     -> real output pin
-```
-
-## 11. Verified analogLib/vdc bias-source system
-
-Verified source:
-```text
-Library = analogLib
-Cell    = vdc
-View    = symbol
-Terminals = PLUS / MINUS
-PLUS center  = (0.0, 0.0)
-MINUS center = (0.0, -0.375)
-```
-
-After placing an instance:
-```skill
-cdf = cdfGetInstCDF(inst)
-cdf->vdc->value = "1.5"
-```
-
-Standard source:
-```text
-BIAS_NET
-   |
- PLUS
-   |
- VDC
-   |
- MINUS
-   |
- VSS
-```
-
-Do not physically wire a VDC terminal directly into a MOS terminal; use independent labeled stubs.
-
-### VSS source rule
-
-When a self-contained test schematic is requested, the generator may create an explicit `analogLib/vdc` reference source:
-```text
-PLUS  -> VSS
-MINUS -> VSS
-VDC   = 0 V
-```
-
-Both terminals must carry the `VSS` net label. The source is a reference/test source, not a second ground net.
-
-## 12. Specification-first generation workflow
+## 13. Specification-first generation workflow
 
 ```text
 1. Ask all specs.
-2. Ask bias strategy and VDC-vs-pin choice.
-3. Confirm Design Contract.
-4. Decide/confirm topology.
-5. Build device/net table.
-6. Choose W/L/NF/M and identify source of values.
-7. Choose initial bias values and identify source.
-8. Place devices.
-9. Read actual transformed terminal coordinates.
-10. Verify PMOS S/D orientation where required.
-11. Derive G/B and S/D directions from actual terminal pairs.
-12. Create one straight isolated stub per terminal.
-13. Apply net labels.
-14. Classify external nets and create only intentional real pins.
-15. Create analogLib/vdc sources when requested.
-16. Set VDC values through instance CDF.
-17. Save.
-18. Check and Save in Cadence.
-19. Verify DC operating point.
-20. Only then run AC/transient performance tests.
+2. Confirm Design Contract.
+3. Decide/confirm topology.
+4. Build device/net table.
+5. Choose TotalW/L/NF/M and identify source of values.
+6. Derive W/finger in the sizing layer.
+7. Place devices.
+8. Explicitly assign w/l/wf/fingers/simM/nf/m.
+9. Validate complete CDF sizing state.
+10. Read actual transformed terminal coordinates.
+11. Verify PMOS S/D orientation where required.
+12. Derive G/B and S/D directions.
+13. Create isolated stubs and labels.
+14. Create only intentional external pins.
+15. Create VDC sources when requested.
+16. Save.
+17. Check and Save in Cadence.
+18. Verify DC operating point.
+19. Only then run AC/transient performance tests.
+```
 
-## 13. Validation gate
+## 14. Validation gate
 
 Before delivery:
 - correct device count and masters
-- intentional W/L/NF/M
+- intentional TotalW/L/NF/M
+- explicit w/l/wf/fingers/simM/nf/m assignment
+- CDF sizing state matches the requested design state
 - PMOS actual S/D geometry passes source-top requirement where applicable
 - every S/G/D/B has a net
-- G/B are opposite directions and S/D are opposite directions
-- no physical terminal-to-terminal short unless explicitly requested
-- no looping/diagonal/overlapping stubs
-- no standalone floating internal wires
-- external pins are real and only on intentional user-facing nets
-- VDC uses analogLib/vdc PLUS/MINUS and instance CDF `vdc`
+- G/B and S/D direction rules pass
+- no unintended physical shorts
+- no malformed stubs
+- external pins are intentional
 - VDC-driven nets have no redundant pins
-- explicit VSS reference source, when requested, uses VSS on both terminals and 0 V
+- VDC uses analogLib/vdc instance CDF `vdc`
+- explicit VSS reference source uses VSS/VSS and 0 V
 - syntax checked
 - stale helper collisions avoided
 
-## 14. Reference 5T NMOS-input starting data
+## 15. Legacy sizing rule
+
+Existing historical/reference artifacts whose W values predate the TotalW migration are legacy per-finger-W artifacts unless explicitly marked TotalW. Do not rewrite historical evidence. Current canonical generators must be migrated to TotalW-first.
+
+For a migrated legacy generator with `NF=1` and `M=1`:
 
 ```text
-M1/M2 = NMOS differential pair
-M3/M4 = PMOS current-mirror load
-M5    = NMOS tail
-M1/M2 = 2u / 240n
-M3/M4 = 4u / 480n
-M5    = 6u / 480n
-NF=1 M=1
+TotalW = legacy W
+W/finger = legacy W
 ```
 
-These are starting values only.
-
-## 15. Reference implementation
-
-Use the verified Telescopic generator as the low-level implementation reference:
-```text
-assets/generators/telescopic_ota_v4_pmos_pins.il
-```
-
-Reuse the implementation method; do not copy its topology into unrelated circuits.
+For NF>1 or M>1, explicitly document TotalW and the derived implementation W/finger.
 
 ## 16. Final operating principle
 
 ```text
 ASK FOR SPECS FIRST.
 CONFIRM THE CONTRACT.
-PRESERVE VERIFIED INFRASTRUCTURE.
+USE TOTALW AS THE DESIGN-LEVEL WIDTH.
+EXPLICITLY ASSIGN W, L, WF, M, NF AND THE VERIFIED tsmcN65 MIRROR FIELDS.
+KEEP WF AS THE AUTHORITATIVE TOTAL-WIDTH FIELD.
 USE ACTUAL TERMINAL GEOMETRY.
-MAKE G/B OPPOSITE AND S/D OPPOSITE FROM ACTUAL COORDINATES.
 VERIFY PMOS SOURCE-TOP / DRAIN-BOTTOM FROM ACTUAL S/D COORDINATES.
 USE ONE STRAIGHT ISOLATED STUB PER TERMINAL.
 USE NET LABELS FOR LOGICAL CONNECTIVITY.
 DO NOT CREATE REDUNDANT PINS ON VDC-DRIVEN NETS.
-USE analogLib/vdc + PLUS/MINUS + instance-CDF vdc FOR SOURCES.
 VALIDATE BEFORE CLAIMING SUCCESS.
 ```
