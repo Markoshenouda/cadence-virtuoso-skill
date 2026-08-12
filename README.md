@@ -6,59 +6,71 @@ Repository for Cadence Virtuoso IC6.1.7 / `tsmcN65` schematic-generation skills,
 
 | Purpose | Entry point | Status |
 |---|---|---|
-| Master rules | [`skills/analog-design-agent/SKILL.md`](skills/analog-design-agent/SKILL.md) | Current skill entry point |
-| Latest 5T artifact | [`canonical/5t-ota/5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il`](canonical/5t-ota/5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il) | Cadence-run test; see verification note below |
-| Latest Telescopic generator | [`canonical/telescopic-ota/telescopic_ota_v4_pmos_pins.il`](canonical/telescopic-ota/telescopic_ota_v4_pmos_pins.il) | Latest working version reported in the conversation; runbook says not executed in the actual session |
-| Folded Cascode skill | [`skills/folded-cascode-ota/SKILL.md`](skills/folded-cascode-ota/SKILL.md) | Skill/reference only |
-| Folded Cascode latest reference | [`canonical/folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md`](canonical/folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md) | V8 reference; no V9 `.il` was available |
+| Master rules | `skills/analog-design-agent/SKILL.md` | Current TotalW-first skill v3.3 |
+| MOS sizing contract | `references/TotalW_MOS_Sizing_Convention_20260812.md` | Current verified convention |
+| Golden sizing regression | `tests/mos-sizing/TotalW_CDF_Assignment_Complete_Test_V5_20260812.il` | Cadence-verified on 2026-08-12 |
+| Latest 5T artifact | `canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; re-run required after migration |
+| Latest Telescopic artifact | `canonical/telescopic-ota/telescopic_ota_totalw_v2_20260812.il` | Current TotalW-first generator; preserves actual M4.D VOUT endpoint |
+| Folded Cascode skill | `skills/folded-cascode-ota/SKILL.md` | Current TotalW-first skill |
+| Folded Cascode executable | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il` | Legacy/reference until TotalW migration is Cadence-verified |
 
 ## Repository map
 
 ```text
-canonical/       Clearly named latest/candidate entry points
-history/         Copies of every preserved generator, test, and runbook
+canonical/       Current executable entry points
+history/         Preserved historical generators/tests/runbooks
 skills/          Reusable AI/Cadence rules
-assets/          Original generator and runbook paths kept for compatibility
-references/      Topology and knowledge-base documents
-tests/           Cadence regression tests and validation evidence
-runbooks/        Stable execution guidance and commands
+assets/          Compatibility copies; not canonical unless marked current
+references/      Knowledge base and sizing conventions
+tests/           Cadence regression tests and verification evidence
+runbooks/        Stable execution guidance
 output/examples/ Screenshots/examples; not executable generators
 ```
 
-Each area has an index README. The original paths remain intact so existing links and workflows keep working.
+## Repository-wide MOS sizing contract
+
+The AI/design level uses only:
+
+```text
+TotalW
+L
+NF
+M
+```
+
+The verified tsmcN65 implementation is:
+
+```text
+W/finger = TotalW / NF
+wf        = TotalW
+fingers   = NF
+simM      = M
+totalM    = NF * M
+nf        = NF
+m         = M
+```
+
+Every MOS must explicitly assign `w`, `l`, `wf`, `fingers`, `simM`, `totalM`, `nf`, and `m`. No sizing field may depend on a default or stale instance state.
 
 ## Verification ledger
 
-- **5T PMOS/VDC test, 2026-08-12:** the conversation records a successful Cadence load/run, `SCH-1426` schematic check with no errors, PMOS source-above-drain using actual transformed coordinates (`MY` passed, `MX` failed), VDC-driven nets without redundant external pins, isolated stubs, and explicit 0-V VSS source labels on both terminals.
-- **G/B direction:** the same recorded CIW output says `G -> RIGHT` and `B -> UP`. That conflicts with the intended rule that G/B are opposite horizontal directions. This repository records the rule as a required acceptance criterion, not as verified evidence from that run.
-- **Telescopic V4:** retained as the latest working generator reported in the conversation. Its runbook explicitly says the pin test/generator had not been executed in the actual Cadence session.
-- **Folded Cascode V8:** retained as a reference topology/skill. No executable V8/V9 `.il` was present in the repository or workspace, so none is invented here.
-
-## Latest rules carried forward
-
-- Derive terminal direction from actual transformed pin geometry; do not use the instance bounding box as a direction proxy.
-- PMOS orientation is selected by checking actual transformed coordinates so `S.Y > D.Y`; do not assume `MX` universally.
-- G and B must be opposite horizontal directions; S and D must be opposite vertical directions. A generator must assert this, and the 2026-08-12 evidence still needs the B-direction rerun.
-- Use one short straight isolated stub per MOS terminal. Use repeated net labels for same-net connectivity instead of physical terminal-to-terminal wires.
-- VDC-driven nets do not receive redundant external pins. `VOUT` is the user-facing external-pin example.
-- A self-contained testbench may use an explicit `analogLib/vdc` at `0 V` with `VSS` labels on both `PLUS` and `MINUS`.
+- **TotalW CDF regression V5, 2026-08-12:** successfully executed in the user's live Cadence IC6.1.7 / tsmcN65 environment. The test verified multiple NF/M combinations and `totalM = fingers * simM` after save.
+- **5T PMOS/VDC test, 2026-08-12:** previous successful Cadence run remains recorded in the historical verification material.
+- **Telescopic VOUT:** current generator keeps `M2.D`/`M4.D` on `VOUT` and creates the external VOUT pin at the actual M4.D stub endpoint.
+- **Historical artifacts:** old W-first generators remain preserved and are not presented as current TotalW generators.
 
 ## Run a generator
 
-From Windows CMD, copy the selected `.il` file to Debian:
+From Windows CMD:
 
 ```cmd
 scp "C:\Users\marko\Desktop\your_file.il" cadence@192.168.75.217:/home/cadence/
 ```
 
-In a new empty Cadence schematic, load it in CIW:
+In a new empty Cadence schematic:
 
 ```skill
 load("/home/cadence/your_file.il")
 ```
 
-Then use the exact procedure documented by its runbook. Never call an artifact “Cadence-verified” unless the verification evidence is recorded in `tests/` or its associated README.
-
-## Missing local uploads
-
-The referenced workspace contained no additional `.il` uploads. In particular, the conversation named `Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il`, `5T_OTA_NMOS_V2_STRAIGHT_FIXED_20260812.il`, `5T_OTA_Generator_FINAL_V3.il`, and `5T_OTA_Generator_PMOS_INPUT_FINAL.il`; their exact contents were unavailable, so they are documented as gaps rather than recreated.
+Then run the exact procedure documented by the corresponding runbook. Do not call a generator Cadence-verified until the live run is recorded.
