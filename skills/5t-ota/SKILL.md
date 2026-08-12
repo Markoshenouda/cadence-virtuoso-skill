@@ -1,29 +1,29 @@
 ---
 name: cadence-5t-ota
-version: 1.2.0
-description: Generate 5T CMOS OTA schematics using the verified Cadence IC6.1.7/tsmcN65 infrastructure, with TotalW-first MOS sizing, tested PMOS source-top verification, opposite G/B routing, isolated named stubs, and VDC-driven net pin policy.
+version: 1.3.0
+description: Generate verified 5T CMOS OTA schematics in Cadence IC6.1.7/tsmcN65 using the repository TotalW-first MOS contract, explicit complete CDF assignment, geometry-verified PMOS orientation, isolated stubs, and VDC policy.
 ---
 
-# 5T OTA Design Skill v1.2
+# 5T OTA Design Skill v1.3
 
-Use this skill together with `skills/analog-design-agent/SKILL.md`.
+Use together with `skills/analog-design-agent/SKILL.md`.
 
-## 1. Mandatory specification interview
+## 1. Mandatory design inputs
 
-Before generating `.il`, ask for the full circuit, technology, performance, operating-condition, sizing, bias, and interface specifications. Confirm the Design Contract first.
+Before generation confirm the Design Contract and obtain the required circuit/performance/interface specifications.
 
-## 2. Canonical 5T topology
+## 2. Canonical topology
 
 ```text
-M1/M2 = NMOS differential input pair
+M1/M2 = differential input pair
 M3/M4 = PMOS current-mirror active load
-M5    = NMOS tail-current source
-VOUT  = single-ended output at M2.D / M4.D
+M5    = NMOS tail current source
+VOUT  = single-ended at M2.D / M4.D
 ```
 
 ## 3. TotalW-first sizing — mandatory
 
-The designer/AI specifies each MOS with:
+Every MOS is specified as:
 
 ```text
 TotalW
@@ -32,37 +32,38 @@ NF
 M
 ```
 
-For verified `tsmcN65`:
+Verified tsmcN65 mapping:
 
 ```text
 TotalW -> wf
 L      -> l
-NF     -> fingers and nf
-M      -> simM and m
-W      -> explicit per-finger implementation width
+NF     -> fingers + nf
+M      -> simM + m
+W      -> internally derived W/finger
 ```
 
-Every generated MOS must explicitly assign the complete state:
+Explicit assignment is mandatory:
 
 ```skill
 cdf->w->value       = W_PER_FINGER
 cdf->l->value       = L
-cdf->wf->value      = TOTAL_W
+cdf->wf->value      = TotalW
 cdf->fingers->value = NF
 cdf->simM->value    = M
+cdf->totalM->value  = NF * M
 cdf->nf->value      = NF
 cdf->m->value       = M
 ```
 
-The generator must print and validate all seven fields. `wf` is the authoritative TotalW field.
-
-For the current canonical 5T reference, NF=1 and M=1, so:
+Relations:
 
 ```text
-TotalW = W_PER_FINGER
+W_PER_FINGER = TotalW / NF
+WF = TotalW
+totalM = NF * M
 ```
 
-Do not expose the old W-first interface in new 5T generators.
+Read back and validate all eight fields. No defaults or stale values are allowed.
 
 ## 4. Canonical net map
 
@@ -89,79 +90,19 @@ M3.B -> VDD
 M4.B -> VDD
 ```
 
-M3 diode connection uses two independent stubs labeled `MIRROR`; never draw a physical G-D wire merely to make the net common.
+Use repeated labels and isolated stubs; do not physically short terminals merely to implement a logical net.
 
-## 5. Verified platform
+## 5. PMOS orientation and terminal geometry
 
-```text
-Virtuoso = IC6.1.7
-tsmcN65
-nch / pch
-S G B D
-```
+For PMOS source-top/drain-bottom, test actual transformed S/D coordinates and require `S.Y > D.Y`. Do not hard-code a universal orientation.
 
-## 6. Required low-level infrastructure
+Derive G/B and S/D stub directions from actual transformed coordinates.
 
-Reuse:
-- `geGetEditCellView`
-- `dbOpenCellViewByType`
-- `dbCreateInst`
-- `cdfGetInstCDF`
-- `dbFindTermByName`
-- `centerBox`
-- `dbTransformPoint`
-- `schCreateWire`
-- `schCreateWireLabel`
-- `schCreatePin`
+## 6. VDC and external pins
 
-Do not use `schCreateLabel`, `hiGetString`, `gets`, C-style `(pinName == "G")`, or vector addition such as `p + list(dx dy)`.
+Use `basic/iopin` only for intentional user-facing pins. VDC-driven nets must not receive redundant external pins. Use `analogLib/vdc` and its `vdc` CDF parameter.
 
-## 7. MOS orientation and terminal direction
-
-### NMOS
-Use `R0` only after verifying actual transformed terminal geometry.
-
-### PMOS
-Do NOT blindly assume `MX` is source-top. For every generated PMOS that must have source above drain:
-1. place a candidate orientation;
-2. read transformed S/D coordinates;
-3. require `S.Y > D.Y`;
-4. delete failing candidates and try alternatives;
-5. keep only the passing orientation.
-
-### G/B and S/D direction rule
-
-Derive stub directions from actual transformed terminal pairs:
-
-```text
-G direction = G - B
-B direction = B - G
-S direction = S - D
-D direction = D - S
-```
-
-Do not infer direction from placement or bounding boxes.
-
-## 8. Mandatory isolated-stub routing
-
-Every S/G/D/B terminal gets exactly one short straight stub and a net label. Same logical net means repeated labels, never a physical terminal-to-terminal wire.
-
-## 9. Real external pins vs VDC-driven nets
-
-Use `basic/iopin/symbol` + `schCreatePin` for true user-facing ports. A net driven by a generated `analogLib/vdc` source MUST NOT also receive a redundant external pin by default.
-
-## 10. Verified analogLib/vdc
-
-```text
-Library = analogLib
-Cell    = vdc
-PLUS    = (0.0, 0.0)
-MINUS   = (0.0, -0.375)
-```
-
-Set voltage through instance CDF `vdc`, use isolated stubs, and label both ends of an explicit VSS reference as `VSS` when requested.
-
-## 11. Starting reference dimensions
+## 7. Starting reference dimensions
 
 ```text
 M1/M2 = TotalW 2u / L 240n / NF 1 / M 1
@@ -171,22 +112,20 @@ M5    = TotalW 6u / L 480n / NF 1 / M 1
 
 These are starting values, not verified performance results.
 
-## 12. Validation gate
+## 8. Validation gate
 
 Before delivery verify:
-- five devices, correct masters and names
-- TotalW/L/NF/M specified
-- explicit W/L/WF/fingers/simM/nf/m assignment
-- `wf` equals requested TotalW
+- five correct devices/masters
+- TotalW/L/NF/M for every MOS
+- explicit w/l/wf/fingers/simM/totalM/nf/m assignment
+- `wf == TotalW`
+- `totalM == NF*M`
 - actual PMOS source-top geometry
-- G/B opposite and S/D opposite directions
-- every terminal labeled
-- no unintended physical terminal short
-- no loops/diagonals/floating internal wires
+- opposite G/B and S/D directions
+- every terminal has a logical net
+- no unintended physical terminal shorts
 - only intentional external pins
-- VDC parameters set through instance CDF
-- VDC-driven nets have no redundant pins
-- VSS reference source, if requested, is 0 V with both ends labeled VSS
-- schematic saved and Check-and-Save has no errors
+- VDC parameters are explicit
+- Check-and-Save has no errors
 
 Do not claim gain/GBW until actual Cadence simulation verifies them.
