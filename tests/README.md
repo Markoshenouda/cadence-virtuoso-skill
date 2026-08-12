@@ -1,15 +1,29 @@
 # Tests and verification evidence
 
-## Latest recorded test
+## Golden MOS sizing regression
 
-[`5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il`](5T_OTA_PMOS_VDC_RULE_TEST_20260812_FINAL_V2_WITH_VSS.il) is the latest 5T regression artifact. Main procedure:
+`mos-sizing/TotalW_CDF_Assignment_Complete_Test_V5_20260812.il` is the current golden sizing regression.
 
 ```skill
-Create5TOTA_PMOS_VDC_RULE_TEST_20260812()
+TW_Complete_TotalW_Regression_Test_V5()
 ```
 
-The conversation records successful Cadence schematic checks, PMOS S/D coordinate validation, VDC values/pin policy, isolated stubs, and explicit 0-V VSS. The recorded terminal diagnostic also contains `B -> UP`, so the required `G -> RIGHT / B -> LEFT` rule remains an acceptance check for the next rerun, not a proven result of this exact log.
+It verifies in the live tsmcN65 environment:
+
+- TotalW/L/NF/M as the design-level inputs
+- explicit `w/l/wf/fingers/simM/totalM/nf/m` assignment
+- `wf == TotalW`
+- `W/finger = TotalW/NF`
+- `totalM = fingers * simM`
+- persistence after `dbSave()`
+- NF/M combinations including `(3,2)` and `(5,3)`
+
+The user executed V5 successfully on 2026-08-12 and obtained `COMPLETE TOTALW REGRESSION TEST V5: PASS`.
+
+## Existing circuit tests
+
+The existing 5T PMOS/VDC regression remains preserved as circuit-level evidence. Its documented PMOS geometry and VDC/pin checks are separate from the MOS sizing contract.
 
 ## Evidence policy
 
-A file is “Cadence-verified” only when the repository includes the exact run output or a dated test note that establishes what passed. Static parenthesis checks, a successful `load()`, or a generated schematic alone do not prove analog performance or terminal-direction correctness.
+A file is “Cadence-verified” only when the repository contains the exact live-run evidence or a dated test note. A successful `load()` alone does not prove schematic correctness or analog performance.
