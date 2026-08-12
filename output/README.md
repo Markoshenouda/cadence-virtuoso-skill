@@ -1,9 +1,3 @@
-# Output
+# Outputs and examples
 
-This folder contains the three reference screenshots used in the Cadence SKILL workflow:
-
-- `5tOTA.png`
-- `5tOTApmos.png`
-- `TelescopicOTA_V3.png`
-
-Use these images as visual references for the working OTA generators and the spec-first SKILL skill.
+This folder is for screenshots and generated examples, not source generators. The preserved `TelescopicOTA_V3.png` is copied to `output/examples/` as a visual example; it is not proof of simulation or Cadence execution by itself.

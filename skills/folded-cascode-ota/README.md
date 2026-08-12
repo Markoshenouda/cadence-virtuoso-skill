@@ -1,66 +1,41 @@
 # Folded-Cascode OTA Skill
 
-This directory records the verified folded-cascode OTA workflow developed in the user's Cadence Virtuoso IC6.1.7 / TSMC65 environment.
+The folded-cascode skill now follows the repository-wide TotalW-first sizing contract.
 
-## Current reference
+## Current sizing contract
 
-The latest verified visual-routing revision in the conversation is **V8 — STRAIGHT**.
-
-Its defining rule is:
-
-> Every MOS terminal gets its own short straight isolated stub. Same-net connectivity is created by repeated net labels only. No two MOS terminals are physically connected by generated wires.
-
-## V8 routing rules
+Every MOS is specified with:
 
 ```text
-NMOS: D up, S down, G left, B right
-PMOS MX: S up, D down, G left, B right
+TotalW, L, NF, M
 ```
 
-The left/right placement of a MOS does not change these directions.
-
-## VDC rules
-
-The verified `analogLib/vdc` symbol has:
-
-- `PLUS`
-- `MINUS`
-- CDF parameter `vdc`
-
-The VDD source is:
+The generator must explicitly assign:
 
 ```text
-VDD -> PLUS -> VDC(1.5 V) -> MINUS -> VSS
+w, l, wf, fingers, simM, totalM, nf, m
 ```
 
-Bias sources use the same pattern and return to VSS.
-
-## Current initial bias values
+with:
 
 ```text
-VDD       1.50 V
-VINP      0.75 V
-VINN      0.75 V
-VBP_FOLD  0.90 V
-VBN_CAS   0.75 V
-VBN_SINK  0.60 V
-VBN_TAIL  0.60 V
-VSS       0 V
+W/finger = TotalW/NF
+wf = TotalW
+totalM = NF*M
 ```
 
-These are starting values for DC testing, not proof of the performance targets.
+## Current executable status
 
-## Required workflow for future designs
+The existing V9 `.il` remains a legacy/reference artifact until a TotalW-migrated executable is run and verified in the user's Cadence environment. It is not silently relabeled as current.
 
-1. Ask for complete design specifications.
-2. Confirm the design contract.
-3. Build a complete device/net table.
-4. Reuse the verified Cadence infrastructure.
-5. Use actual transformed pin coordinates.
-6. Generate only short isolated straight terminal stubs.
-7. Use repeated net labels instead of physical same-net connections.
-8. Create real external pins with `schCreatePin`.
-9. Add VDC sources only using the verified `analogLib/vdc` behavior.
-10. Validate syntax, topology, pins, orientation, and visual routing before delivery.
+## Verified routing rules
 
-See `skills/folded-cascode-ota/SKILL.md` for the complete operating rules.
+- Every MOS terminal gets one short straight isolated stub.
+- Same-net connectivity uses repeated net labels.
+- Terminal directions are derived from actual transformed pin coordinates.
+- PMOS source-top is accepted only after actual S/D coordinate verification.
+- VDC-driven nets do not receive redundant external pins.
+
+## Bias reference
+
+The existing V8 reference bias values remain starting values only and are not performance claims.
