@@ -1,25 +1,39 @@
 # Canonical artifacts
 
-This folder is the short path to the latest or most relevant artifact for each circuit family. Historical/compatibility artifacts remain preserved; current canonical generators use the repository-wide **TotalW-first MOS sizing convention**.
+This folder contains the current executable entry point for each circuit family. Historical/compatibility artifacts remain preserved separately and are not silently rewritten.
 
 ## Current MOS sizing contract
 
-For every current canonical generator:
+Every current canonical generator uses:
 
 ```text
 Design input: TotalW, L, NF, M
-PDK mapping:  wf=TotalW, l=L, fingers=NF, simM=M
-Explicit CDF state: w, l, wf, fingers, simM, nf, m
+
+Derived implementation:
+W/finger = TotalW / NF
+
+Explicit tsmcN65 CDF:
+w, l, wf, fingers, simM, totalM, nf, m
+
+totalM = NF * M
 ```
 
-`wf` is the verified tsmcN65 `total_width(M)` field. `w` is the explicit per-finger implementation width.
+`wf` is the verified `tsmcN65 total_width(M)` field and is the authoritative TotalW field.
 
-| Family | Canonical file | Classification |
+| Family | Canonical artifact | Status |
 |---|---|---|
-| 5T OTA | `5t-ota/5T_OTA_PMOS_TOTALW_V1_20260812.il` | TotalW-first executable generator; current migration artifact |
-| Telescopic OTA | `telescopic-ota/telescopic_ota_totalw_v1_20260812.il` | TotalW-first executable generator; current migration artifact |
-| Folded Cascode OTA | `folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md` | Reference document; executable generator still requires TotalW migration before becoming canonical |
+| 5T OTA | `5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; requires Cadence re-run after migration |
+| Telescopic OTA | `telescopic-ota/telescopic_ota_totalw_v2_20260812.il` | Current TotalW-first generator; preserves actual M4.D VOUT endpoint logic |
+| Folded Cascode OTA | `folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md` | Reference only; executable remains legacy until a TotalW version is Cadence-verified |
 
-Historical W-first files are not rewritten as historical evidence. A current generator must not use the old W-first API.
+## Verification policy
 
-Update this table and the relevant runbook after the TotalW generator has been executed successfully in Cadence.
+A generator is called **Cadence-verified** only after the user runs it in the live IC6.1.7 / tsmcN65 environment and the result is recorded in `tests/` or its associated README.
+
+The TotalW sizing foundation itself is verified by:
+
+```text
+tests/mos-sizing/TotalW_CDF_Assignment_Complete_Test_V5_20260812.il
+```
+
+which verifies explicit W/L/WF/NF/M assignment and `totalM = fingers * simM`.
