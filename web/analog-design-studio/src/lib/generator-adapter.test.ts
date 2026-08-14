@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generatorContracts } from '@/lib/generator-contract';
-import { parameterizeCanonicalGenerator } from '@/lib/generator-adapter';
+import { parameterizeCanonicalGenerator, sanitizeCadenceIL } from '@/lib/generator-adapter';
 import type { DesignConfig } from '@/lib/validation';
 
 type TestConfig = DesignConfig;
@@ -46,5 +46,12 @@ describe('parameterized generator adapter', () => {
     const source = 'M1=T5TW_Place(cv nmos "M1" 0:6 "2u" "240n" "1" "1" "R0")';
     expect(() => parameterizeCanonicalGenerator(source, config, generatorContracts['5t-ota']))
       .toThrow(/M2|M3|M4|M5/);
+  });
+
+  it('converts legacy UTF-8 punctuation and units to ASCII-safe Cadence source', () => {
+    const source = 'Power = 84µW, SR = 42 V/µs, T = 27°C — VOUTP → VOUTN';
+    const sanitized = sanitizeCadenceIL(source);
+    expect(sanitized).toBe('Power = 84uW, SR = 42 V/us, T = 27degC - VOUTP -> VOUTN');
+    expect(/[^\x00-\x7F]/.test(sanitized)).toBe(false);
   });
 });
