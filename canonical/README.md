@@ -24,7 +24,7 @@ totalM = NF * M
 |---|---|---|
 | 5T OTA | `5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; requires Cadence re-run after migration |
 | 5T OTA — PMOS input / `pch_mac` + `nch_mac` | `5t-ota/5T_OTA_PMOS_INPUT_MAC_V1_20260814.il` | User-run successfully in live Cadence; sizing placeholder-only; electrical performance unverified |
-| Telescopic OTA | `telescopic-ota/telescopic_ota_totalw_v2_20260812.il` | Current TotalW-first generator; preserves actual M4.D VOUT endpoint logic |
+| Telescopic OTA | `telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il` | Canonical schematic-generation artifact; Check & Save verified; operating point and performance unverified |
 | Folded Cascode OTA | `folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md` | Reference only; executable remains legacy until a TotalW version is Cadence-verified |
 
 ## Verification policy
