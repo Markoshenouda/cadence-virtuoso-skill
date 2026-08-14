@@ -183,9 +183,9 @@ export async function generateParameterizedArtifact(config: DesignConfig): Promi
   const { content: canonical } = await readCanonicalGenerator(contract);
   const parameterized = parameterizeCanonicalGenerator(canonical, config, contract);
   const generated = sanitizeCadenceText(normalizeCadenceCompatibility(parameterized));
-  const provenance = [
+  const provenance = sanitizeCadenceText([
     '; ============================================================',
-    '; Analog Design Studio — Parameterized Generator Artifact',
+    '; Analog Design Studio - Parameterized Generator Artifact',
     `; Topology      : ${config.topologyId}`,
     `; Technology    : ${config.technologyId}`,
     `; Source        : ${contract.source.path}`,
@@ -198,7 +198,7 @@ export async function generateParameterizedArtifact(config: DesignConfig): Promi
     '; Cadence execution: false',
     '; ============================================================',
     '',
-  ].join('\n');
+  ].join('\n'));
   return {
     filename: `${safeName(config.topologyId)}_${safeName(config.technologyId)}_parameterized.il`,
     content: provenance + generated,
