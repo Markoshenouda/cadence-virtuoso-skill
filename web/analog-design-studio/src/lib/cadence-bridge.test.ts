@@ -60,6 +60,7 @@ describe('Phase 4 Cadence execution bridge', () => {
     });
     expect(wrapper).toContain('load("/home/cadence/run/artifact.il")');
     expect(wrapper).toContain('Create5TOTA_PMOS_TOTALW_V2_20260812()');
+    expect(wrapper).toContain('ADS_BRIDGE_LIBRARY_CONTEXT_OK');
     expect(wrapper).toContain('ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED');
     expect(wrapper).toContain('ADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED');
     expect(wrapper).toContain('exit()');
@@ -82,7 +83,7 @@ describe('Phase 4 Cadence execution bridge', () => {
   });
 
   it('parses explicit bridge evidence without treating warnings as success blockers', () => {
-    const evidence = parseCadenceEvidence('ADS_BRIDGE_START\nWARNING test\nADS_BRIDGE_CHECK_AND_SAVE_REQUIRED\nADS_BRIDGE_GENERATOR_DONE\nADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED\nCheck and Save completed');
+    const evidence = parseCadenceEvidence('ADS_BRIDGE_START\nWARNING test\nADS_BRIDGE_LIBRARY_CONTEXT_OK\nADS_BRIDGE_CHECK_AND_SAVE_REQUIRED\nADS_BRIDGE_GENERATOR_DONE\nADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED\nCheck and Save completed');
     expect(evidence.processStarted).toBe(true);
     expect(evidence.processExited).toBe(true);
     expect(evidence.checkAndSaveRequested).toBe(true);
@@ -96,18 +97,20 @@ describe('Phase 4 Cadence execution bridge', () => {
     expect(evidence.errorDetected).toBe(true);
   });
 
-  it('builds a GUI detached launch command with the runtime cds.lib environment', () => {
+  it('builds an isolated GUI launch command with explicit cds.lib and log path', () => {
     const command = buildDetachedCadenceCommand(
       bridge,
       '/home/cadence/Desktop/analog-design-studio-runs/test_run',
       '/home/cadence/Desktop/analog-design-studio-runs/test_run/run.restore.il',
       '/home/cadence/Desktop/analog-design-studio-runs/test_run/virtuoso.log',
     );
-    expect(command).toContain('export DISPLAY=\':0\'');
-    expect(command).toContain('export CDS_ROOT=\'/usr/local/cadence/IC617\'');
-    expect(command).toContain('export CDSHOME=\'/usr/local/cadence/IC617\'');
-    expect(command).toContain('export CDS_LIB_PATH=\'/home/cadence/Desktop/analog-design-studio-runs/test_run/cds.lib\'');
-    expect(command).toContain("virtuoso' -restore");
+    expect(command).toContain("export DISPLAY=':0'");
+    expect(command).toContain("export CDS_ROOT='/usr/local/cadence/IC617'");
+    expect(command).toContain("export CDSHOME='/usr/local/cadence/IC617'");
+    expect(command).toContain("export CDS_LOG_PATH='/home/cadence/Desktop/analog-design-studio-runs/test_run'");
+    expect(command).toContain("export HOME='/home/cadence/Desktop/analog-design-studio-runs/test_run/.cadence-home'");
+    expect(command).toContain("-cdslib '/home/cadence/Desktop/analog-design-studio-runs/test_run/cds.lib'");
+    expect(command).toContain("-log '/home/cadence/Desktop/analog-design-studio-runs/test_run/virtuoso.log'");
     expect(command).not.toContain('-nograph');
   });
 
@@ -117,7 +120,8 @@ describe('Phase 4 Cadence execution bridge', () => {
     expect(result.cadenceExecuted).toBe(false);
     expect(result.evidence.checkAndSaveRequested).toBe(true);
     expect(result.remoteFiles.cdsLib).toContain('/cds.lib');
-    expect(result.command).toEqual(['/usr/local/cadence/IC617/tools/dfII/bin/virtuoso', '-restore', result.remoteFiles.wrapper]);
+    expect(result.remoteFiles.displayDrf).toContain('/display.drf');
+    expect(result.command).toEqual(['/usr/local/cadence/IC617/tools/dfII/bin/virtuoso', '-cdslib', result.remoteFiles.cdsLib, '-restore', result.remoteFiles.wrapper, '-log', result.remoteFiles.log]);
   });
 
   it('reports disabled bridge without claiming execution', async () => {
