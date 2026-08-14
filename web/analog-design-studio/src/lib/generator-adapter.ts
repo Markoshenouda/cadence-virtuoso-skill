@@ -51,6 +51,35 @@ function parameterizePlacementLine(
   return `${match[0]}"${state.totalW}" "${L}" "${NF}" "${M}"${orientationSuffix})`;
 }
 
+/**
+ * Cadence IC6.1.7's SKILL/IL reader in this environment expects legacy
+ * single-byte source text. UTF-8 characters such as micro sign, degree sign,
+ * em dash, and arrows can make the reader report an illegal character and
+ * abort the entire restore file. Canonical source files may remain UTF-8 for
+ * documentation, but every generated .il artifact must be ASCII-safe.
+ */
+export function sanitizeCadenceIL(source: string) {
+  const replacements: Record<string, string> = {
+    'µ': 'u',
+    'μ': 'u',
+    '°': 'deg',
+    '—': '-',
+    '–': '-',
+    '→': '->',
+    '←': '<-',
+    '≤': '<=',
+    '≥': '>=',
+    '×': 'x',
+    '√': 'sqrt',
+    '²': '2',
+    '³': '3',
+    '…': '...',
+  };
+
+  const mapped = source.replace(/[\u0080-\uFFFF]/g, (char) => replacements[char] ?? '?');
+  return mapped.replace(/\r\n/g, '\n');
+}
+
 export async function readCanonicalGenerator(contract: GeneratorContract) {
   const root = repositoryRoot();
   const absolutePath = path.resolve(root, contract.source.path);
@@ -96,7 +125,7 @@ export async function generateParameterizedArtifact(config: DesignConfig): Promi
   const generated = parameterizeCanonicalGenerator(canonical, config, contract);
   const provenance = [
     '; ============================================================',
-    '; Analog Design Studio — Parameterized Generator Artifact',
+    '; Analog Design Studio - Parameterized Generator Artifact',
     `; Topology      : ${config.topologyId}`,
     `; Technology    : ${config.technologyId}`,
     `; Source        : ${contract.source.path}`,
@@ -112,7 +141,7 @@ export async function generateParameterizedArtifact(config: DesignConfig): Promi
   ].join('\n');
   return {
     filename: `${safeName(config.topologyId)}_${safeName(config.technologyId)}_parameterized.il`,
-    content: provenance + generated,
+    content: sanitizeCadenceIL(provenance + generated),
     sourcePath: contract.source.path,
     topologyId: config.topologyId,
     technologyId: config.technologyId,
