@@ -52,13 +52,71 @@ function parameterizePlacementLine(
 }
 
 /**
- * Cadence IC6.1.7's SKILL/IL reader in this environment expects legacy
- * single-byte source text. UTF-8 characters such as micro sign, degree sign,
- * em dash, and arrows can make the reader report an illegal character and
- * abort the entire restore file. Canonical source files may remain UTF-8 for
- * documentation, but every generated .il artifact must be ASCII-safe.
+ * Normalize known legacy-SKILL constructs that are accepted by newer Cadence
+ * environments but are parsed unreliably by the IC6.1.7 reader used by the
+ * local bridge. This transformation is deliberately narrow and does not alter
+ * topology, placement, routing, or bias values.
  */
-export function sanitizeCadenceIL(source: string) {
+function normalizeCadenceCompatibility(source: string) {
+  const brokenStubEnd = `procedure(TOTA8_StubEnd(inst pinName)
+    let((g b s d p dx dy)
+        g=TOTA8_PinCenter(inst "G")
+        b=TOTA8_PinCenter(inst "B")
+        s=TOTA8_PinCenter(inst "S")
+        d=TOTA8_PinCenter(inst "D")
+        p=TOTA8_PinCenter(inst pinName)
+        if(equal(pinName "G") then dx=car(g)-car(b) dy=cadr(g)-cadr(b)
+        else if(equal(pinName "B") then dx=car(b)-car(g) dy=cadr(b)-cadr(g)
+        else if(equal(pinName "S") then dx=car(s)-car(d) dy=cadr(s)-cadr(d)
+        else if(equal(pinName "D") then dx=car(d)-car(s) dy=cadr(d)-cadr(s)
+        else error("TOTA8: unsupported terminal %s.\\n" pinName))))
+        if(abs(dx)>=abs(dy) then
+            if(dx<0.0 then list(car(p)-TOTA8_STUB cadr(p)) else list(car(p)+TOTA8_STUB cadr(p)))
+        else
+            if(dy<0.0 then list(car(p) cadr(p)-TOTA8_STUB) else list(car(p) cadr(p)+TOTA8_STUB))
+        )
+)`;
+
+  const fixedStubEnd = `procedure(TOTA8_StubEnd(inst pinName)
+    let((g b s d p dx dy)
+        g=TOTA8_PinCenter(inst "G")
+        b=TOTA8_PinCenter(inst "B")
+        s=TOTA8_PinCenter(inst "S")
+        d=TOTA8_PinCenter(inst "D")
+        p=TOTA8_PinCenter(inst pinName)
+        cond(
+            (equal(pinName "G")
+                dx=car(g)-car(b)
+                dy=cadr(g)-cadr(b))
+            (equal(pinName "B")
+                dx=car(b)-car(g)
+                dy=cadr(b)-cadr(g))
+            (equal(pinName "S")
+                dx=car(s)-car(d)
+                dy=cadr(s)-cadr(d))
+            (equal(pinName "D")
+                dx=car(d)-car(s)
+                dy=cadr(d)-cadr(s))
+            (t
+                error("TOTA8: unsupported terminal %s.\\n" pinName)))
+        if(abs(dx)>=abs(dy) then
+            if(dx<0.0 then list(car(p)-TOTA8_STUB cadr(p)) else list(car(p)+TOTA8_STUB cadr(p)))
+        else
+            if(dy<0.0 then list(car(p) cadr(p)-TOTA8_STUB) else list(car(p) cadr(p)+TOTA8_STUB))
+        )
+    )
+)`;
+
+  if (source.includes(brokenStubEnd)) return source.replace(brokenStubEnd, fixedStubEnd);
+  return source;
+}
+
+/**
+ * Cadence IC6.1.7's legacy reader is not UTF-8 safe for arbitrary Unicode
+ * source text. Keep the canonical generator readable, but emit an ASCII-only
+ * execution artifact to the bridge.
+ */
+function sanitizeCadenceText(source: string) {
   const replacements: Record<string, string> = {
     'µ': 'u',
     'μ': 'u',
@@ -76,8 +134,9 @@ export function sanitizeCadenceIL(source: string) {
     '…': '...',
   };
 
-  const mapped = source.replace(/[\u0080-\uFFFF]/g, (char) => replacements[char] ?? '?');
-  return mapped.replace(/\r\n/g, '\n');
+  let output = source;
+  for (const [from, to] of Object.entries(replacements)) output = output.split(from).join(to);
+  return output.replace(/[^\x00-\x7F]/g, '');
 }
 
 export async function readCanonicalGenerator(contract: GeneratorContract) {
@@ -122,10 +181,11 @@ export function parameterizeCanonicalGenerator(source: string, config: DesignCon
 export async function generateParameterizedArtifact(config: DesignConfig): Promise<GeneratedArtifact> {
   const contract = getGeneratorContract(config.topologyId, config.technologyId);
   const { content: canonical } = await readCanonicalGenerator(contract);
-  const generated = parameterizeCanonicalGenerator(canonical, config, contract);
+  const parameterized = parameterizeCanonicalGenerator(canonical, config, contract);
+  const generated = sanitizeCadenceText(normalizeCadenceCompatibility(parameterized));
   const provenance = [
     '; ============================================================',
-    '; Analog Design Studio - Parameterized Generator Artifact',
+    '; Analog Design Studio — Parameterized Generator Artifact',
     `; Topology      : ${config.topologyId}`,
     `; Technology    : ${config.technologyId}`,
     `; Source        : ${contract.source.path}`,
@@ -141,7 +201,7 @@ export async function generateParameterizedArtifact(config: DesignConfig): Promi
   ].join('\n');
   return {
     filename: `${safeName(config.topologyId)}_${safeName(config.technologyId)}_parameterized.il`,
-    content: sanitizeCadenceIL(provenance + generated),
+    content: provenance + generated,
     sourcePath: contract.source.path,
     topologyId: config.topologyId,
     technologyId: config.technologyId,
