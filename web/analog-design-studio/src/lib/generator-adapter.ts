@@ -27,8 +27,18 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function parameterizePlacementLine(line: string, procedureName: string, device: string, totalW: string, L: string, NF: number, M: number) {
-  const prefix = new RegExp(`^(\\s*.*?${escapeRegExp(procedureName)}\\(cv\\s+\\w+\\s+"${escapeRegExp(device)}"\\s+[^\\s]+\\s+)`);
+function parameterizePlacementLine(
+  line: string,
+  procedureName: string,
+  device: string,
+  totalW: string,
+  L: string,
+  NF: number,
+  M: number,
+) {
+  const prefix = new RegExp(
+    `^(\\s*.*?${escapeRegExp(procedureName)}\\(cv\\s+\\w+\\s+"${escapeRegExp(device)}"\\s+[^\\s]+\\s+)`,
+  );
   const match = line.match(prefix);
   if (!match) return null;
   const suffix = line.match(/(\s+"[^"]+"\s*\)\s*)$/);
@@ -56,21 +66,30 @@ export function parameterizeCanonicalGenerator(source: string, config: DesignCon
   const byDevice = new Map(config.devices.map((d) => [d.device, d]));
   const lines = source.split(/\r?\n/);
   const changed = new Set<string>();
+  const skipped = new Set<string>();
   const output = lines.map((line) => {
     for (const spec of contract.devices) {
       const device = byDevice.get(spec.device);
       if (!device) continue;
-      if (!line.includes(`${contract.placementProcedure}(cv`) || !line.includes(`"${spec.device}"`)) continue;
-      const updated = parameterizePlacementLine(line, contract.placementProcedure, spec.device, device.totalW, device.L, device.NF, device.M);
+      const procedureName = spec.placementProcedure ?? contract.placementProcedure;
+      if (!line.includes(`${procedureName}(cv`) || !line.includes(`"${spec.device}"`)) continue;
+      const updated = parameterizePlacementLine(line, procedureName, spec.device, device.totalW, device.L, device.NF, device.M);
       if (updated) {
         changed.add(spec.device);
         return updated;
       }
+      skipped.add(spec.device);
     }
     return line;
   });
   const missing = contract.devices.map((d) => d.device).filter((d) => !changed.has(d));
-  if (missing.length) throw new Error(`Canonical generator contract anchors not found for: ${missing.join(', ')}.`);
+  if (missing.length) {
+    const details = missing.map((device) => {
+      const spec = contract.devices.find((entry) => entry.device === device);
+      return `${device} (${spec?.placementProcedure ?? contract.placementProcedure})`;
+    });
+    throw new Error(`Canonical generator contract anchors not found for: ${details.join(', ')}.`);
+  }
   return output.join('\n');
 }
 
