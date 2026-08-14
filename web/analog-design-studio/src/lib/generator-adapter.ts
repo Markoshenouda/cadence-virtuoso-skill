@@ -41,15 +41,14 @@ function parameterizePlacementLine(
   );
   const match = line.match(prefix);
   if (!match) return null;
-  const suffix = line.match(/(\s+"[^"]+"\s*\)\s*)$/);
-  if (!suffix) return null;
-  const middleStart = match[0].length;
-  const middleEnd = line.length - suffix[0].length;
-  const middle = line.slice(middleStart, middleEnd);
-  const fields = middle.match(/^"[^"]+"\s+"[^"]+"\s+"[^"]+"\s+"[^"]+"$/);
+
+  const remainder = line.slice(match[0].length);
+  const fields = remainder.match(/^"[^"]+"\s+"[^"]+"\s+"[^"]+"\s+"[^"]+"(\s+(?:"[^"]+")\s*)?\)\s*$/);
   if (!fields) return null;
+
+  const orientationSuffix = fields[1] ?? '';
   const state = deriveMosState(totalW, NF, M);
-  return `${line.slice(0, middleStart)}"${state.totalW}" "${L}" "${NF}" "${M}"${line.slice(middleEnd)}`;
+  return `${match[0]}"${state.totalW}" "${L}" "${NF}" "${M}"${orientationSuffix})`;
 }
 
 export async function readCanonicalGenerator(contract: GeneratorContract) {
@@ -66,7 +65,6 @@ export function parameterizeCanonicalGenerator(source: string, config: DesignCon
   const byDevice = new Map(config.devices.map((d) => [d.device, d]));
   const lines = source.split(/\r?\n/);
   const changed = new Set<string>();
-  const skipped = new Set<string>();
   const output = lines.map((line) => {
     for (const spec of contract.devices) {
       const device = byDevice.get(spec.device);
@@ -78,7 +76,6 @@ export function parameterizeCanonicalGenerator(source: string, config: DesignCon
         changed.add(spec.device);
         return updated;
       }
-      skipped.add(spec.device);
     }
     return line;
   });
