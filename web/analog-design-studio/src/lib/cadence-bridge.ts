@@ -335,3 +335,4 @@ export async function verifyCadenceBinary(config: CadenceBridgeConfig) {
     return { ok: false, message: error?.stderr || error?.message || 'Cadence executable check failed.' };
   }
 }
+x
