@@ -4,7 +4,10 @@ import { defaultSpecs, validateDesign, type DesignConfig } from '@/lib/validatio
 
 const validConfig: DesignConfig = {
   circuitId: 'ota', topologyId: '5t-ota', technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT',
-  specs: defaultSpecs, sizingMethod: 'gmID', devices: [{ device: 'M1', type: 'NMOS', totalW: '2u', L: '240n', NF: 1, M: 1 }],
+  specs: defaultSpecs, sizingMethod: 'gmID', devices: [
+    { device: 'M1', type: 'NMOS', totalW: '2u', L: '240n', NF: 1, M: 1 },
+    { device: 'M2', type: 'NMOS', totalW: '2u', L: '240n', NF: 1, M: 1 },
+  ],
 };
 
 describe('Analog Design Studio repository model', () => {
@@ -27,13 +30,21 @@ describe('Analog Design Studio repository model', () => {
     const issues = validateDesign({ ...validConfig, vdd: null }, getTopology('ota', '5t-ota')?.generator);
     expect(issues.some(i => i.field === 'vdd' && i.level === 'error')).toBe(true);
   });
-  it('accepts a complete gm/ID configuration except for candidate warning state', () => {
+  it('rejects unsupported technology', () => {
+    const issues = validateDesign({ ...validConfig, technologyId: 'gpdk45' }, getTopology('ota', '5t-ota')?.generator);
+    expect(issues.some(i => i.field === 'technology' && i.level === 'error')).toBe(true);
+  });
+  it('rejects an invalid process corner', () => {
+    const issues = validateDesign({ ...validConfig, corner: 'XX' }, getTopology('ota', '5t-ota')?.generator);
+    expect(issues.some(i => i.field === 'corner' && i.level === 'error')).toBe(true);
+  });
+  it('rejects incomplete MOS sizing', () => {
+    const issues = validateDesign({ ...validConfig, devices: [{ device: 'M1', type: 'NMOS', totalW: '', L: '', NF: 0, M: 0 }] }, getTopology('ota', '5t-ota')?.generator);
+    expect(issues.some(i => i.field === 'M1' && i.level === 'error')).toBe(true);
+  });
+  it('accepts a complete configuration except for repository status warning', () => {
     const issues = validateDesign(validConfig, getTopology('ota', '5t-ota')?.generator);
     expect(issues.filter(i => i.level === 'error')).toHaveLength(0);
     expect(issues.some(i => i.level === 'warning')).toBe(true);
-  });
-  it('rejects incomplete manual sizing', () => {
-    const issues = validateDesign({ ...validConfig, sizingMethod: 'manual', devices: [{ device: 'M1', type: 'NMOS', totalW: '', L: '', NF: 0, M: 0 }] }, getTopology('ota', '5t-ota')?.generator);
-    expect(issues.some(i => i.field === 'M1' && i.level === 'error')).toBe(true);
   });
 });
