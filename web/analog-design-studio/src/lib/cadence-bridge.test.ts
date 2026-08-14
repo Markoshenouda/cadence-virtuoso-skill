@@ -22,7 +22,7 @@ const config: DesignConfig = {
 
 const bridge: CadenceBridgeConfig = {
   enabled: false,
-  host: '192.168.75.219',
+  host: '192.168.75.217',
   user: 'cadence',
   remoteWorkdir: '/home/cadence/Desktop/analog-design-studio-runs',
   virtuosoPath: '/usr/local/cadence/IC617/tools/dfII/bin/virtuoso',
