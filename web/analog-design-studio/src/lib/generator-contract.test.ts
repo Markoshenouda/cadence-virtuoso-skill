@@ -23,6 +23,7 @@ describe('Phase 3 generator contracts', () => {
   it('defines contracts for all current OTA topologies', () => {
     expect(Object.keys(generatorContracts)).toEqual(['5t-ota', 'telescopic-ota', 'folded-cascode-ota']);
     expect(generatorContracts['folded-cascode-ota'].devices.slice(2, 6).every(d => d.type === 'PMOS')).toBe(true);
+    expect(generatorContracts['folded-cascode-ota'].devices.slice(2, 6).every(d => d.placementProcedure === 'FCW_PlacePMOSAuto')).toBe(true);
     for (const contract of Object.values(generatorContracts)) expect(contract.technologyId).toBe('tsmcN65');
   });
   it('derives W/finger and totalM from the design-level contract', () => {
@@ -56,13 +57,13 @@ describe('Phase 3 generator contracts', () => {
     expect(generated).toContain('TOTA8_LabelTerminal(cv M1 "G" "VINP")');
     expect(generated).toContain('TOTA8_LabelVDCTerminal(cv inst "PLUS" plusNet)');
   });
-  it('parameterizes Folded Cascode with the correct PMOS/NMOS contract', async () => {
+  it('parameterizes Folded Cascode with the PDK-aware PMOS/NMOS contract', async () => {
     const contract = getGeneratorContract('folded-cascode-ota', 'tsmcN65');
     const root = path.resolve(process.cwd(), '..', '..');
     const source = await fs.readFile(path.join(root, contract.source.path), 'utf8');
     const generated = parameterizeCanonicalGenerator(source, base('folded-cascode-ota', dFolded), contract);
-    expect(generated).toContain('FCW_PlaceMOS(cv pmos "M3" -5:12 "23u" "900n" "2" "1" "MX")');
-    expect(generated).toContain('FCW_PlaceMOS(cv pmos "M6" 5:8 "26u" "1u" "5" "1" "MX")');
+    expect(generated).toContain('FCW_PlacePMOSAuto(cv pmos "M3" -5:12 "23u" "900n" "2" "1")');
+    expect(generated).toContain('FCW_PlacePMOSAuto(cv pmos "M6" 5:8 "26u" "1u" "5" "1")');
     expect(generated).toContain('FCW_PlaceMOS(cv nmos "M11" 0:-8 "31u" "1u" "6" "2" "R0")');
   });
   it('produces a generated artifact with explicit provenance and no Cadence execution claim', async () => {
