@@ -43,7 +43,7 @@ describe('Phase 3 generator contracts', () => {
     expect(after).toBe(before);
     expect(generated).not.toBe(before);
     expect(generated).toContain('T5TW_Place(cv nmos "M1" 0:6 "10u" "300n" "2" "2" "R0")');
-    expect(generated).toContain('T5TW_Place(cv pmos "M4" 6:10 "10u" "600n" "5" "2"');
+    expect(generated).toContain('T5TW_PlaceVerifiedPMOS(cv pmos "M4" 6:10 "10u" "600n" "5" "2"');
     expect(generated).not.toContain('T5TW_Place(cv nmos "M1" 0:6 "2u" "240n" "1" "1" "R0")');
   });
   it('parameterizes Telescopic V7 without changing placement, routing, or VDC code', async () => {
