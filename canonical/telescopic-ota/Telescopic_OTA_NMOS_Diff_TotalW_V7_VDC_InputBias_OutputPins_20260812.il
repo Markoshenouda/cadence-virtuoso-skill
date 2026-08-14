@@ -28,12 +28,13 @@ procedure(TOTA7_DeriveW(TotalW NF)
 ; Compare CDF physical values numerically instead of requiring identical
 ; string representations. Cadence PCells may normalize values such as
 ; "1u" into a different but physically equivalent CDF representation.
+; Keep the expression deliberately simple because IC6.1.7 SKILL parsing
+; is sensitive to nested prefix arithmetic expressions.
 procedure(TOTA7_CDFValueMatches(actual expected)
-    let((a e tol)
+    let((a e)
         a=cdfParseFloatString(actual)
         e=cdfParseFloatString(expected)
-        tol=max(1e-12 (* 1e-9 (max 1.0 abs(e))))
-        if(abs(a-e) <= tol then t else nil)
+        if(abs(a-e) <= 1e-9 then t else nil)
     )
 )
 
@@ -213,12 +214,9 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260
         TOTA7_CreateVDC(cv vdcMaster "VINN_SRC" 15:-6 "VINN" "VSS" "0.80")
         TOTA7_CreatePin(cv pinMaster "VOUTP" "output" voutpEnd)
         TOTA7_CreatePin(cv pinMaster "VOUTN" "output" voutnEnd)
+
         dbSave(cv)
-        printf("\n============================================================\n TOTA7 GENERATOR COMPLETED\n============================================================\n")
-        printf("MOS      : M1..M9\nOUTPUTS  : VOUTP / VOUTN\nBIAS VDC : VBN_TAIL / VBN_CAS / VBP_CAS / VBP_LOAD / VINP / VINN\n")
-        printf("POWER VDC: VDD / VSS\nOUTPUT PIN: VOUTP / VOUTN\nWIRING   : local stub + net label ONLY\n")
-        printf("CDF      : w/l/wf/fingers/simM/totalM/nf/m explicit\ntotalM   : NF * M\n")
-        printf("STATUS   : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED\n============================================================\n")
+        printf("TOTA7: SCHEMATIC_GENERATION_COMPLETED\n")
         t
     )
 )
