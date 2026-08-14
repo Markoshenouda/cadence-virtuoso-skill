@@ -25,6 +25,18 @@ procedure(TOTA7_DeriveW(TotalW NF)
     )
 )
 
+; Compare CDF physical values numerically instead of requiring identical
+; string representations. Cadence PCells may normalize values such as
+; "1u" into a different but physically equivalent CDF representation.
+procedure(TOTA7_CDFValueMatches(actual expected)
+    let((a e tol)
+        a=cdfParseFloatString(actual)
+        e=cdfParseFloatString(expected)
+        tol=max(1e-12 (* 1e-9 (max 1.0 abs(e))))
+        <=(abs(- a e) tol)
+    )
+)
+
 procedure(TOTA7_SetMOS(inst TotalW L NF M)
     let((cdf WperFinger totalM)
         cdf=cdfGetInstCDF(inst)
@@ -33,6 +45,7 @@ procedure(TOTA7_SetMOS(inst TotalW L NF M)
             error("TOTA7: incomplete MOS CDF on %s.\n" inst~>name))
         WperFinger=TOTA7_DeriveW(TotalW NF)
         totalM=sprintf(nil "%d" (atoi(NF) * atoi(M)))
+
         cdf->w->value=WperFinger
         cdf->l->value=L
         cdf->wf->value=TotalW
@@ -41,8 +54,16 @@ procedure(TOTA7_SetMOS(inst TotalW L NF M)
         cdf->totalM->value=totalM
         cdf->nf->value=NF
         cdf->m->value=M
-        unless(equal(cdf->w->value WperFinger) && equal(cdf->l->value L) && equal(cdf->wf->value TotalW)
-            error("TOTA7: width/length CDF readback mismatch on %s.\n" inst~>name))
+
+        unless(TOTA7_CDFValueMatches(cdf->w->value WperFinger)
+            error("TOTA7: width CDF readback mismatch on %s (expected=%s actual=%s).\n"
+                inst~>name WperFinger cdf->w->value))
+        unless(TOTA7_CDFValueMatches(cdf->l->value L)
+            error("TOTA7: length CDF readback mismatch on %s (expected=%s actual=%s).\n"
+                inst~>name L cdf->l->value))
+        unless(TOTA7_CDFValueMatches(cdf->wf->value TotalW)
+            error("TOTA7: total-width CDF readback mismatch on %s (expected=%s actual=%s).\n"
+                inst~>name TotalW cdf->wf->value))
         unless(equal(cdf->fingers->value NF) && equal(cdf->simM->value M) && equal(cdf->totalM->value totalM)
             error("TOTA7: multiplicity CDF readback mismatch on %s.\n" inst~>name))
         unless(equal(cdf->nf->value NF) && equal(cdf->m->value M)
