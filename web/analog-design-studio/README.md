@@ -10,11 +10,23 @@ A local web-based engineering interface around the existing `cadence-virtuoso-sk
 - Generator registry/resolver with explicit artifact status (`verified`, `candidate`, `unverified`).
 - Technology metadata for the repository's TSMC N65 platform.
 - Specification validation and explicit target/operator/unit fields.
-- Repository-compatible sizing model: `TotalW`, `L`, `NF`, `M`.
+- Repository-compatible sizing model: `TotalW`, `L`, `NF`, `M` for every registered MOS entry.
 - SVG topology previews derived from the registered topology model.
 - Result screen that distinguishes configuration/generator resolution from actual Cadence execution.
-- API endpoint at `POST /api/design/resolve` for future backend/agent integration.
-- Vitest coverage for circuit selection, generator resolution, validation, and status boundaries.
+- `POST /api/design/resolve` for metadata-only resolution.
+- `POST /api/design/generate` for real repository-source `.il` export.
+- Generator adapter that reads the actual repository `.il` source at runtime, adds configuration provenance comments, and returns a downloadable artifact.
+- Vitest coverage for circuit selection, generator resolution, validation, status boundaries, and generator-source export.
+
+## Phase 1 completion pass
+
+The Phase 1 audit identified a few gaps and they are now addressed:
+
+- The New Design page no longer presents the repository branch as `main` while working on the MVP branch.
+- The sizing screen now exposes a structured MOS list for the selected topology using `TotalW`, `L`, `NF`, and `M`.
+- Validation now checks technology, corner, specification operators, device presence, MOS polarity, and all sizing fields.
+- The result screen now has a real Generate & Download SKILL action instead of a placeholder button.
+- Generator/runbook links point to the actual repository artifacts on the current MVP branch.
 
 ## Repository integration
 
@@ -34,6 +46,36 @@ Folded Cascode OTA
 ```
 
 The UI never treats a `load()` success or a candidate artifact as performance verification. The repository's own authority map, design contract and runbooks define the actual engineering status.
+
+## Phase 2 generator adapter
+
+The adapter is in `src/lib/generator-adapter.ts`.
+
+```text
+Validated DesignConfig
+       ↓
+Topology / Generator Registry
+       ↓
+Repository generator path
+       ↓
+Read actual .il source
+       ↓
+Prepend configuration provenance comments
+       ↓
+Download concrete .il artifact
+```
+
+The adapter is intentionally conservative. It does **not** rewrite hard-coded device sizing inside the existing generators, because doing so would silently turn the web UI into a second generator implementation and could violate the repository's canonical contracts.
+
+The generated artifact is therefore:
+
+```text
+status            = generated
+Cadence executed  = false
+Spectre executed  = false
+```
+
+The configuration is carried as provenance metadata. Parameterized generator synthesis is a later phase after the repository generator contracts are explicitly refactored for parameter injection.
 
 ## Sizing contract
 
@@ -78,7 +120,8 @@ npm test
 3. Add the real runbook path and exact invocation when available.
 4. Set the artifact status conservatively.
 5. Add or extend validation tests in `src/lib/registry.test.ts`.
-6. Do not copy `.il` generator source into the frontend.
+6. Add adapter coverage when the new generator path is introduced.
+7. Do not copy `.il` generator source into the frontend.
 
 ## Architecture
 
@@ -91,18 +134,21 @@ Validation
    ↓
 Topology / Generator Registry
    ↓
-Repository canonical generator + runbook + skill
+Repository Generator Adapter
    ↓
-Future generator execution adapter
+Concrete .il export
+   ↓
+Future Cadence Execution Adapter
    ↓
 Future Cadence / Spectre integration
 ```
 
-## Deliberate MVP boundaries
+## Deliberate boundaries
 
 Not implemented yet:
 
 - real Cadence Virtuoso execution
+- parameter injection into the existing canonical `.il` generators
 - Spectre simulation
 - simulation-result parsing
 - AI sizing agent
@@ -111,15 +157,15 @@ Not implemented yet:
 - authentication/cloud deployment
 - real-time VM control
 
-The generation-result screen therefore reports **ready/resolved**, not **executed in Cadence**.
+The generation-result screen therefore reports **generated/resolved**, not **executed in Cadence**.
 
 ## Roadmap
 
-### Phase 2 — Generator adapter
-Create a backend execution adapter that accepts a validated `DesignConfig`, resolves the exact repository generator contract, and produces a concrete `.il` artifact without altering canonical engineering files.
+### Phase 2 — Generator adapter — implemented
+Resolve the exact repository generator and export its real `.il` source with configuration provenance while preserving the canonical source file unchanged.
 
-### Phase 3 — Cadence execution
-Add a controlled local execution bridge for the user's Virtuoso environment and surface CIW/Check & Save evidence.
+### Phase 3 — Parameterized generator contracts + Cadence execution
+Refactor only where justified so canonical generators can consume an explicit validated design configuration, then add a controlled local execution bridge for the user's Virtuoso environment and surface CIW/Check & Save evidence.
 
 ### Phase 4 — Simulation
 Add Spectre job submission, result parsing and performance dashboards for gain, GBW, phase margin, slew rate, power, noise, PSRR and CMRR.
