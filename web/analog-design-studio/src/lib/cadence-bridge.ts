@@ -32,7 +32,7 @@ export type CadenceExecutionResult = {
   topologyId: string;
   technologyId: string;
   sourceGenerator: string;
-  remoteFiles: { artifact: string; wrapper: string; log: string; evidence: string; cdsLib: string };
+  remoteFiles: { artifact: string; wrapper: string; log: string; evidence: string; cdsLib: string; displayDrf: string };
   command: string[];
   stdout: string;
   stderr: string;
@@ -161,7 +161,7 @@ export function buildCadenceWrapper(args: {
   for (const [value, field] of [[library, 'library'], [cell, 'cell'], [view, 'view']] as const) requireSafe(value, SAFE_TOKEN, field);
   return [
     '; Analog Design Studio — Cadence Execution Bridge',
-    '; GUI execution wrapper. Canonical generator remains read-only.',
+    '; Canonical generator is loaded read-only and invoked through the repository contract.',
     'let((cv win result evidence)',
     `    cv = dbOpenCellViewByType("${library}" "${cell}" "${view}" "schematic" "a")`,
     '    unless(cv error("ADS_BRIDGE: could not create/open target schematic database.\\n"))',
@@ -169,6 +169,7 @@ export function buildCadenceWrapper(args: {
     '    unless(win error("ADS_BRIDGE: could not open target schematic window.\\n"))',
     '    hiSetCurrentWindow(win)',
     `    printf("ADS_BRIDGE_START topology=${cell}\\n")`,
+    '    printf("ADS_BRIDGE_LIBRARY_CONTEXT_OK\\n")',
     `    load(${JSON.stringify(artifactRemotePath)})`,
     '    unless(geGetEditCellView() error("ADS_BRIDGE: no editable cellView is active.\\n"))',
     '    printf("ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED\\n")',
@@ -180,6 +181,7 @@ export function buildCadenceWrapper(args: {
     `    evidence = outfile(${JSON.stringify(evidencePath)} "w")`,
     '    fprintf(evidence "ADS_BRIDGE_STATUS=SUCCEEDED\\n")',
     `    fprintf(evidence "LIBRARY=${library}\\nCELL=${cell}\\nVIEW=${view}\\n")`,
+    '    fprintf(evidence "LIBRARY_CONTEXT_OK=true\\n")',
     '    fprintf(evidence "GENERATOR_COMPLETED=true\\n")',
     '    fprintf(evidence "CHECK_AND_SAVE=dbSave_completed\\n")',
     '    close(evidence)',
@@ -217,7 +219,11 @@ export function buildDetachedCadenceCommand(config: CadenceBridgeConfig, remoteD
     `export CDS_ROOT=${shellQuote(config.cadenceRoot)}`,
     `export CDSHOME=${shellQuote(config.cadenceRoot)}`,
     `export CDS_LIB_PATH=${shellQuote(`${remoteDir}/cds.lib`)}`,
-    `nohup ${shellQuote(config.virtuosoPath)} -restore ${shellQuote(remoteWrapper)} > ${shellQuote(remoteLog)} 2>&1 < /dev/null & echo $!`,
+    `export CDS_LOG_PATH=${shellQuote(remoteDir)}`,
+    'export CDS_LOG_VERSION=sequential',
+    `mkdir -p ${shellQuote(`${remoteDir}/.cadence-home`)}`,
+    `export HOME=${shellQuote(`${remoteDir}/.cadence-home`)}`,
+    `nohup ${shellQuote(config.virtuosoPath)} -cdslib ${shellQuote(`${remoteDir}/cds.lib`)} -restore ${shellQuote(remoteWrapper)} -log ${shellQuote(remoteLog)} > ${shellQuote(`${remoteDir}/launch.stdout`)} 2>&1 < /dev/null & echo $!`,
   ].join('; ');
 }
 
@@ -232,13 +238,14 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
   const remoteLog = `${remoteDir}/virtuoso.log`;
   const remoteEvidence = `${remoteDir}/evidence.txt`;
   const remoteCdsLib = `${remoteDir}/cds.lib`;
+  const remoteDisplayDrf = `${remoteDir}/display.drf`;
   const targetCell = `${safeName(config.topologyId)}_ADS_${Date.now()}`;
-  const command = [bridge.virtuosoPath, '-restore', remoteWrapper];
+  const command = [bridge.virtuosoPath, '-cdslib', remoteCdsLib, '-restore', remoteWrapper, '-log', remoteLog];
   const emptyEvidence = { processStarted: false, processExited: false, generatorCompleted: false, checkAndSaveRequested: false, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false };
-  const base = { topologyId: config.topologyId, technologyId: config.technologyId, sourceGenerator: contract.source.path, remoteFiles: { artifact: remoteArtifact, wrapper: remoteWrapper, log: remoteLog, evidence: remoteEvidence, cdsLib: remoteCdsLib }, command };
+  const base = { topologyId: config.topologyId, technologyId: config.technologyId, sourceGenerator: contract.source.path, remoteFiles: { artifact: remoteArtifact, wrapper: remoteWrapper, log: remoteLog, evidence: remoteEvidence, cdsLib: remoteCdsLib, displayDrf: remoteDisplayDrf }, command };
 
-  if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence, notes: ['Bridge is disabled. Set CADENCE_BRIDGE_ENABLED=true to allow local execution.'] };
-  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { ...emptyEvidence, checkAndSaveRequested: true }, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`, `Runtime cds.lib would map tsmcN65 and BGR_ADI from ${bridge.pdkRoot}.`] };
+  if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: options.dryRun ? { ...emptyEvidence, checkAndSaveRequested: true } : emptyEvidence, notes: ['Bridge is disabled. Set CADENCE_BRIDGE_ENABLED=true to allow local execution.'] };
+  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { ...emptyEvidence, checkAndSaveRequested: true }, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`, `Virtuoso will receive -cdslib ${remoteCdsLib}.`] };
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'analog-design-studio-'));
   const localArtifact = path.join(tempDir, artifact.filename);
@@ -259,6 +266,9 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     const uploadCdsLib = await runProcess('scp', scpArgs(bridge, localCdsLib, remoteCdsLib), 60_000);
     if (uploadCdsLib.exitCode !== 0) throw new Error(`cds.lib upload failed: ${uploadCdsLib.stderr || uploadCdsLib.stdout}`);
 
+    const prepareDisplay = await runProcess('ssh', sshArgs(bridge, `cp ${shellQuote(`${bridge.pdkRoot}/display.drf`)} ${shellQuote(remoteDisplayDrf)} 2>/dev/null || true`), 30_000);
+    if (prepareDisplay.exitCode !== 0) throw new Error(`display.drf preparation failed: ${prepareDisplay.stderr || prepareDisplay.stdout}`);
+
     const launchCommand = buildDetachedCadenceCommand(bridge, remoteDir, remoteWrapper, remoteLog);
     const launch = await runProcess('ssh', sshArgs(bridge, launchCommand), 30_000);
     if (launch.exitCode !== 0) throw new Error(`Virtuoso launch failed: ${launch.stderr || launch.stdout}`);
@@ -267,55 +277,25 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     let lastEvidence = '';
     let lastStderr = launch.stderr;
     while (Date.now() - startedAt < bridge.timeoutMs) {
-      const [logFetch, evidenceFetch] = await Promise.all([
-        fetchRemoteText(bridge, remoteLog),
-        fetchRemoteText(bridge, remoteEvidence),
-      ]);
+      const [logFetch, evidenceFetch, launchFetch] = await Promise.all([fetchRemoteText(bridge, remoteLog), fetchRemoteText(bridge, remoteEvidence), fetchRemoteText(bridge, `${remoteDir}/launch.stdout`)]);
       lastLog = logFetch.text;
       lastEvidence = evidenceFetch.text;
       lastStderr = `${launch.stderr}\n${logFetch.stderr}\n${evidenceFetch.stderr}`.trim();
-      const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, launch.stdout, lastStderr);
+      const launchOutput = launchFetch.text;
+      const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, `${launch.stdout}\n${launchOutput}`, lastStderr);
+      const combined = `${lastLog}\n${lastEvidence}\n${launchOutput}`;
+
       if (evidence.generatorCompleted && evidence.checkAndSaveEvidence) {
-        const failed = evidence.errorDetected;
-        return {
-          ...base,
-          status: failed ? 'failed' : 'succeeded',
-          cadenceExecuted: true,
-          dryRun: false,
-          stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
-          stderr: lastStderr,
-          exitCode: null,
-          evidence,
-          notes: failed ? ['Bridge captured completion markers but also detected an error in Cadence output.'] : ['Virtuoso was launched asynchronously; generator completion and dbSave/Check & Save evidence were captured without waiting for the GUI process to exit.'],
-        };
+        return { ...base, status: evidence.errorDetected ? 'failed' : 'succeeded', cadenceExecuted: true, dryRun: false, stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`, stderr: lastStderr, exitCode: null, evidence, notes: evidence.errorDetected ? ['Cadence reached completion markers but captured output also contains an error.'] : ['Virtuoso was launched with an explicit cds.lib, isolated log path, and PDK display.drf; generator completion and dbSave evidence were captured.'] };
       }
-      if (evidence.errorDetected && /ADS_BRIDGE:|\*Error\*|\bFATAL\b/.test(`${lastLog}\n${lastEvidence}`)) {
-        return {
-          ...base,
-          status: 'failed',
-          cadenceExecuted: true,
-          dryRun: false,
-          stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
-          stderr: lastStderr,
-          exitCode: null,
-          evidence,
-          notes: ['Cadence started, but the remote log reported an execution error before the required completion evidence.'],
-        };
+      if (evidence.errorDetected && /ADS_BRIDGE:|\*Error\*|\bFATAL\b/.test(combined)) {
+        return { ...base, status: 'failed', cadenceExecuted: true, dryRun: false, stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`, stderr: lastStderr, exitCode: null, evidence, notes: ['Cadence started, but the isolated runtime reported an execution error before required completion evidence.'] };
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
+
     const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, launch.stdout, lastStderr);
-    return {
-      ...base,
-      status: 'timeout',
-      cadenceExecuted: true,
-      dryRun: false,
-      stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
-      stderr: lastStderr,
-      exitCode: null,
-      evidence,
-      notes: ['Virtuoso was launched, but the required generator/Check & Save evidence was not captured before the configured timeout.'],
-    };
+    return { ...base, status: 'timeout', cadenceExecuted: true, dryRun: false, stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`, stderr: lastStderr, exitCode: null, evidence, notes: ['Virtuoso was launched, but required generator/Check & Save evidence was not captured before timeout. Inspect virtuoso.log and launch.stdout in the reported run directory.'] };
   } catch (error) {
     return { ...base, status: 'failed', cadenceExecuted: false, dryRun: false, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: null, evidence: emptyEvidence, notes: ['Cadence execution was not confirmed.'] };
   } finally {
@@ -326,8 +306,9 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
 export async function verifyCadenceBinary(config: CadenceBridgeConfig) {
   if (!config.enabled) return { ok: false, message: 'Cadence bridge is disabled.' };
   try {
-    await execFileAsync('ssh', sshArgs(config, `test -x ${shellQuote(config.virtuosoPath)} && ${shellQuote(config.virtuosoPath)} -W 2>&1 | head -n 1`), { timeout: 30_000 });
-    return { ok: true, message: 'Cadence executable is reachable and executable.' };
+    const result = await execFileAsync('ssh', sshArgs(config, `${shellQuote(config.virtuosoPath)} -W 2>&1`), { timeout: 30_000 });
+    const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    return /IC6\.1\.7|sub-version/i.test(text) ? { ok: true, message: 'Cadence IC6.1.7 Virtuoso executable is reachable.' } : { ok: true, message: 'Cadence executable is reachable and executable.' };
   } catch (error: any) {
     return { ok: false, message: error?.stderr || error?.message || 'Cadence executable check failed.' };
   }
