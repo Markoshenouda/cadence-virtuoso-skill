@@ -46,14 +46,15 @@ describe('Phase 3 generator contracts', () => {
     expect(generated).toContain('T5TW_PlaceVerifiedPMOS(cv pmos "M4" 6:10 "10u" "600n" "5" "2"');
     expect(generated).not.toContain('T5TW_Place(cv nmos "M1" 0:6 "2u" "240n" "1" "1" "R0")');
   });
-  it('parameterizes Telescopic V7 without changing placement, routing, or VDC code', async () => {
+  it('parameterizes Telescopic V8 without changing placement, routing, or VDC code', async () => {
     const contract = getGeneratorContract('telescopic-ota', 'tsmcN65');
     const root = path.resolve(process.cwd(), '..', '..');
     const source = await fs.readFile(path.join(root, contract.source.path), 'utf8');
     const generated = parameterizeCanonicalGenerator(source, base('telescopic-ota', dTel), contract);
-    expect(generated).toContain('TOTA7_PlaceMOS(cv pmos "M7" -5:10 "17u" "1u" "5" "1" "R0")');
-    expect(generated).toContain('TOTA7_CreateVDC(cv vdcMaster "VDD_SRC" -15:10 "VDD" "VSS" "2")');
-    expect(generated).toContain('TOTA7_LabelTerminal(cv M1 "G" "VINP")');
+    expect(generated).toContain('TOTA8_PlaceMOS(cv pmos "M7" -5:10 "17u" "1u" "5" "1" "R0")');
+    expect(generated).toContain('TOTA8_CreateVDC(cv vdcMaster "VDD_SRC" -15:10 "VDD" "VSS" "2")');
+    expect(generated).toContain('TOTA8_LabelTerminal(cv M1 "G" "VINP")');
+    expect(generated).toContain('TOTA8_LabelVDCTerminal(cv inst "PLUS" plusNet)');
   });
   it('parameterizes Folded Cascode with the correct PMOS/NMOS contract', async () => {
     const contract = getGeneratorContract('folded-cascode-ota', 'tsmcN65');
