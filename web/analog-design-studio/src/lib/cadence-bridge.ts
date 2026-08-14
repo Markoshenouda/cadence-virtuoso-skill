@@ -185,6 +185,15 @@ export function parseCadenceEvidence(log: string, stdout = '', stderr = '') {
   };
 }
 
+async function fetchRemoteText(config: CadenceBridgeConfig, remotePath: string) {
+  const result = await runProcess('ssh', sshArgs(config, `cat ${shellQuote(remotePath)} 2>/dev/null || true`), 30_000);
+  return { text: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+}
+
+export function buildDetachedCadenceCommand(config: CadenceBridgeConfig, remoteDir: string, remoteWrapper: string, remoteLog: string) {
+  return `cd ${shellQuote(remoteDir)}; export DISPLAY=${shellQuote(config.display)}; export CDS_ROOT=${shellQuote(config.cadenceRoot)}; nohup ${shellQuote(config.virtuosoPath)} -restore ${shellQuote(remoteWrapper)} > ${shellQuote(remoteLog)} 2>&1 < /dev/null & echo $!`;
+}
+
 export async function executeCadence(config: DesignConfig, options: { dryRun?: boolean; bridge?: CadenceBridgeConfig } = {}): Promise<CadenceExecutionResult> {
   const bridge = options.bridge ?? getCadenceBridgeConfig();
   const contract = getGeneratorContract(config.topologyId, config.technologyId);
@@ -201,11 +210,12 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
   const base = { topologyId: config.topologyId, technologyId: config.technologyId, sourceGenerator: contract.source.path, remoteFiles: { artifact: remoteArtifact, wrapper: remoteWrapper, log: remoteLog, evidence: remoteEvidence }, command };
 
   if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence, notes: ['Bridge is disabled. Set CADENCE_BRIDGE_ENABLED=true to allow local execution.'] };
-  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/${config.topologyId ? 'schematic' : 'schematic'}.`] };
+  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`] };
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'analog-design-studio-'));
   const localArtifact = path.join(tempDir, artifact.filename);
   const localWrapper = path.join(tempDir, 'run.restore.il');
+  const startedAt = Date.now();
   try {
     await writeFile(localArtifact, artifact.content, 'utf8');
     await writeFile(localWrapper, buildCadenceWrapper({ artifactRemotePath: remoteArtifact, invocation: contract.source.invocation, library: bridge.library, cell: targetCell, view: 'schematic', evidencePath: remoteEvidence }), 'utf8');
@@ -217,14 +227,63 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     const uploadWrapper = await runProcess('scp', scpArgs(bridge, localWrapper, remoteWrapper), 60_000);
     if (uploadWrapper.exitCode !== 0) throw new Error(`Wrapper upload failed: ${uploadWrapper.stderr || uploadWrapper.stdout}`);
 
-    const remoteCommand = `export DISPLAY=${shellQuote(bridge.display)}; export CDS_ROOT=${shellQuote(bridge.cadenceRoot)}; cd ${shellQuote(remoteDir)}; ${shellQuote(bridge.virtuosoPath)} -restore ${shellQuote(remoteWrapper)} > ${shellQuote(remoteLog)} 2>&1`;
-    const execution = await runProcess('ssh', sshArgs(bridge, remoteCommand), bridge.timeoutMs);
-    const logFetch = await runProcess('ssh', sshArgs(bridge, `cat ${shellQuote(remoteLog)} 2>/dev/null || true`), 30_000);
-    const evidenceFetch = await runProcess('ssh', sshArgs(bridge, `cat ${shellQuote(remoteEvidence)} 2>/dev/null || true`), 30_000);
-    const log = `${logFetch.stdout}\n${evidenceFetch.stdout}`;
-    const evidence = parseCadenceEvidence(log, execution.stdout, execution.stderr);
-    const status: CadenceExecutionStatus = execution.timedOut ? 'timeout' : execution.exitCode === 0 && evidence.generatorCompleted && evidence.checkAndSaveEvidence && !evidence.errorDetected ? 'succeeded' : 'failed';
-    return { ...base, status, cadenceExecuted: true, dryRun: false, stdout: `${execution.stdout}\n${evidenceFetch.stdout}`, stderr: execution.stderr, exitCode: execution.exitCode, evidence, notes: status === 'succeeded' ? ['Virtuoso exited cleanly and the bridge captured generator completion plus dbSave evidence.'] : ['Cadence was started, but success was not proven by the required evidence markers.'] };
+    const launchCommand = buildDetachedCadenceCommand(bridge, remoteDir, remoteWrapper, remoteLog);
+    const launch = await runProcess('ssh', sshArgs(bridge, launchCommand), 30_000);
+    if (launch.exitCode !== 0) throw new Error(`Virtuoso launch failed: ${launch.stderr || launch.stdout}`);
+
+    let lastLog = '';
+    let lastEvidence = '';
+    let lastStderr = launch.stderr;
+    while (Date.now() - startedAt < bridge.timeoutMs) {
+      const [logFetch, evidenceFetch] = await Promise.all([
+        fetchRemoteText(bridge, remoteLog),
+        fetchRemoteText(bridge, remoteEvidence),
+      ]);
+      lastLog = logFetch.text;
+      lastEvidence = evidenceFetch.text;
+      lastStderr = `${launch.stderr}\n${logFetch.stderr}\n${evidenceFetch.stderr}`.trim();
+      const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, launch.stdout, lastStderr);
+      if (evidence.generatorCompleted && evidence.checkAndSaveEvidence) {
+        const failed = evidence.errorDetected;
+        return {
+          ...base,
+          status: failed ? 'failed' : 'succeeded',
+          cadenceExecuted: true,
+          dryRun: false,
+          stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
+          stderr: lastStderr,
+          exitCode: null,
+          evidence,
+          notes: failed ? ['Bridge captured completion markers but also detected an error in Cadence output.'] : ['Virtuoso was launched asynchronously; generator completion and dbSave/Check & Save evidence were captured without waiting for the GUI process to exit.'],
+        };
+      }
+      if (evidence.errorDetected && /ADS_BRIDGE:|\*Error\*|\bFATAL\b/.test(`${lastLog}\n${lastEvidence}`)) {
+        return {
+          ...base,
+          status: 'failed',
+          cadenceExecuted: true,
+          dryRun: false,
+          stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
+          stderr: lastStderr,
+          exitCode: null,
+          evidence,
+          notes: ['Cadence started, but the remote log reported an execution error before the required completion evidence.'],
+        };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, launch.stdout, lastStderr);
+    return {
+      ...base,
+      status: 'timeout',
+      cadenceExecuted: true,
+      dryRun: false,
+      stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
+      stderr: lastStderr,
+      exitCode: null,
+      evidence,
+      notes: ['Virtuoso was launched, but the required generator/Check & Save evidence was not captured before the configured timeout.'],
+    };
   } catch (error) {
     return { ...base, status: 'failed', cadenceExecuted: false, dryRun: false, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: null, evidence: emptyEvidence, notes: ['Cadence execution was not confirmed.'] };
   } finally {
