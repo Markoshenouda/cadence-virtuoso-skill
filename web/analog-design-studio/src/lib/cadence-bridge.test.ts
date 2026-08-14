@@ -49,7 +49,7 @@ describe('Phase 4 Cadence execution bridge', () => {
     expect(() => getCadenceBridgeConfig({ CADENCE_PDK_ROOT: '/tmp/a;touch' })).toThrow(/unsupported|unsafe/);
   });
 
-  it('builds a fixed wrapper from a repository invocation only', () => {
+  it('builds an IC6.1.7-compatible prog wrapper from a repository invocation only', () => {
     const wrapper = buildCadenceWrapper({
       artifactRemotePath: '/home/cadence/run/artifact.il',
       invocation: 'Create5TOTA_PMOS_TOTALW_V2_20260812()',
@@ -58,12 +58,13 @@ describe('Phase 4 Cadence execution bridge', () => {
       view: 'schematic',
       evidencePath: '/home/cadence/run/evidence.txt',
     });
+    expect(wrapper).toContain('prog((cv win result evidence)');
     expect(wrapper).toContain('load("/home/cadence/run/artifact.il")');
     expect(wrapper).toContain('Create5TOTA_PMOS_TOTALW_V2_20260812()');
     expect(wrapper).toContain('ADS_BRIDGE_LIBRARY_CONTEXT_OK');
     expect(wrapper).toContain('ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED');
     expect(wrapper).toContain('ADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED');
-    expect(wrapper).toContain('exit()');
+    expect(wrapper).not.toContain('exit()');
     expect(() => buildCadenceWrapper({
       artifactRemotePath: '/tmp/a;bad',
       invocation: 'Create5TOTA_PMOS_TOTALW_V2_20260812()',
