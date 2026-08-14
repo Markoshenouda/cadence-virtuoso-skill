@@ -94,7 +94,7 @@ export function getCadenceBridgeConfig(env: NodeJS.ProcessEnv = process.env): Ca
   requireSafe(config.pdkRoot, SAFE_REMOTE, 'pdkRoot');
   requireSafe(config.library, SAFE_TOKEN, 'library');
   if (!/^:[0-9]+$/.test(config.display)) throw new Error('CADENCE_DISPLAY must look like :0, :1, etc.');
-  if (config.sshKeyPath) requireSafe(config.sshKeyPath, /^[A-Za-z0-9_./:\\-]+$/, 'CADENCE_SSH_KEY');
+  if (config.sshKeyPath) requireSafe(config.sshKeyPath, /^[A-Za-z0-9_./:\-]+$/, 'CADENCE_SSH_KEY');
   return config;
 }
 
@@ -134,19 +134,6 @@ function runProcess(file: string, args: string[], timeoutMs: number) {
   });
 }
 
-function buildRuntimeCdsLib(config: CadenceBridgeConfig) {
-  return [
-    '# Analog Design Studio runtime cds.lib',
-    '# Generated automatically for this execution run.',
-    'DEFINE cdsDefTechLib $CDSHOME/tools/dfII/etc/cdsDefTechLib',
-    'DEFINE basic $CDSHOME/tools/dfII/etc/cdslib/basic',
-    'DEFINE analogLib $CDSHOME/tools/dfII/etc/cdslib/artist/analogLib',
-    `DEFINE tsmcN65 ${config.pdkRoot}/tsmcN65`,
-    `DEFINE BGR_ADI ${config.pdkRoot}/BGR_ADI`,
-    '',
-  ].join('\n');
-}
-
 export function buildCadenceWrapper(args: {
   artifactRemotePath: string;
   invocation: string;
@@ -160,8 +147,6 @@ export function buildCadenceWrapper(args: {
   for (const [value, field] of [[artifactRemotePath, 'artifactRemotePath'], [evidencePath, 'evidencePath']] as const) requireSafe(value, SAFE_REMOTE, field);
   for (const [value, field] of [[library, 'library'], [cell, 'cell'], [view, 'view']] as const) requireSafe(value, SAFE_TOKEN, field);
 
-  // Use classic SKILL prog() rather than relying on a top-level let() body.
-  // This is the most conservative form for IC6.1.7 restore-file parsing.
   return [
     '; Analog Design Studio - Cadence Execution Bridge',
     '; Canonical generator is loaded read-only and invoked through the repository contract.',
@@ -216,17 +201,22 @@ async function fetchRemoteText(config: CadenceBridgeConfig, remotePath: string) 
 }
 
 export function buildDetachedCadenceCommand(config: CadenceBridgeConfig, remoteDir: string, remoteWrapper: string, remoteLog: string) {
+  // IMPORTANT: the TSMC cds.lib contains relative definitions such as
+  //   DEFINE tsmcN65 ./tsmcN65
+  // Therefore Virtuoso MUST start with the PDK root as its working directory.
+  // The generated run directory is used only for the artifact, wrapper and logs.
+  const pdkCdsLib = `${config.pdkRoot}/cds.lib`;
   return [
-    `cd ${shellQuote(remoteDir)}`,
+    `cd ${shellQuote(config.pdkRoot)}`,
     `export DISPLAY=${shellQuote(config.display)}`,
     `export CDS_ROOT=${shellQuote(config.cadenceRoot)}`,
     `export CDSHOME=${shellQuote(config.cadenceRoot)}`,
-    `export CDS_LIB_PATH=${shellQuote(`${remoteDir}/cds.lib`)}`,
+    `export CDS_LIB_PATH=${shellQuote(pdkCdsLib)}`,
     `export CDS_LOG_PATH=${shellQuote(remoteDir)}`,
     'export CDS_LOG_VERSION=sequential',
     `mkdir -p ${shellQuote(`${remoteDir}/.cadence-home`)}`,
     `export HOME=${shellQuote(`${remoteDir}/.cadence-home`)}`,
-    `nohup ${shellQuote(config.virtuosoPath)} -cdslib ${shellQuote(`${remoteDir}/cds.lib`)} -restore ${shellQuote(remoteWrapper)} -log ${shellQuote(remoteLog)} > ${shellQuote(`${remoteDir}/launch.stdout`)} 2>&1 < /dev/null & echo $!`,
+    `nohup ${shellQuote(config.virtuosoPath)} -cdslib ${shellQuote(pdkCdsLib)} -restore ${shellQuote(remoteWrapper)} -log ${shellQuote(remoteLog)} > ${shellQuote(`${remoteDir}/launch.stdout`)} 2>&1 < /dev/null & echo $!`,
   ].join('; ');
 }
 
@@ -240,25 +230,23 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
   const remoteWrapper = `${remoteDir}/run.restore.il`;
   const remoteLog = `${remoteDir}/virtuoso.log`;
   const remoteEvidence = `${remoteDir}/evidence.txt`;
-  const remoteCdsLib = `${remoteDir}/cds.lib`;
-  const remoteDisplayDrf = `${remoteDir}/display.drf`;
+  const remoteCdsLib = `${bridge.pdkRoot}/cds.lib`;
+  const remoteDisplayDrf = `${bridge.pdkRoot}/display.drf`;
   const targetCell = `${safeName(config.topologyId)}_ADS_${Date.now()}`;
   const command = [bridge.virtuosoPath, '-cdslib', remoteCdsLib, '-restore', remoteWrapper, '-log', remoteLog];
   const emptyEvidence = { processStarted: false, processExited: false, generatorCompleted: false, checkAndSaveRequested: false, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false };
   const base = { topologyId: config.topologyId, technologyId: config.technologyId, sourceGenerator: contract.source.path, remoteFiles: { artifact: remoteArtifact, wrapper: remoteWrapper, log: remoteLog, evidence: remoteEvidence, cdsLib: remoteCdsLib, displayDrf: remoteDisplayDrf }, command };
 
   if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: options.dryRun ? { ...emptyEvidence, checkAndSaveRequested: true } : emptyEvidence, notes: ['Bridge is disabled. Set CADENCE_BRIDGE_ENABLED=true to allow local execution.'] };
-  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { ...emptyEvidence, checkAndSaveRequested: true }, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`, `Virtuoso will receive -cdslib ${remoteCdsLib}.`] };
+  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { ...emptyEvidence, checkAndSaveRequested: true }, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`, `Virtuoso will start from the TSMC PDK root ${bridge.pdkRoot}.`, `Virtuoso will use ${remoteCdsLib}.`] };
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'analog-design-studio-'));
   const localArtifact = path.join(tempDir, artifact.filename);
   const localWrapper = path.join(tempDir, 'run.restore.il');
-  const localCdsLib = path.join(tempDir, 'cds.lib');
   const startedAt = Date.now();
   try {
     await writeFile(localArtifact, artifact.content, 'utf8');
     await writeFile(localWrapper, buildCadenceWrapper({ artifactRemotePath: remoteArtifact, invocation: contract.source.invocation, library: bridge.library, cell: targetCell, view: 'schematic', evidencePath: remoteEvidence }), 'utf8');
-    await writeFile(localCdsLib, buildRuntimeCdsLib(bridge), 'utf8');
 
     const mkdir = await runProcess('ssh', sshArgs(bridge, `mkdir -p ${shellQuote(remoteDir)}`), 30_000);
     if (mkdir.exitCode !== 0) throw new Error(`Remote staging directory failed: ${mkdir.stderr || mkdir.stdout}`);
@@ -266,11 +254,6 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     if (uploadArtifact.exitCode !== 0) throw new Error(`Artifact upload failed: ${uploadArtifact.stderr || uploadArtifact.stdout}`);
     const uploadWrapper = await runProcess('scp', scpArgs(bridge, localWrapper, remoteWrapper), 60_000);
     if (uploadWrapper.exitCode !== 0) throw new Error(`Wrapper upload failed: ${uploadWrapper.stderr || uploadWrapper.stdout}`);
-    const uploadCdsLib = await runProcess('scp', scpArgs(bridge, localCdsLib, remoteCdsLib), 60_000);
-    if (uploadCdsLib.exitCode !== 0) throw new Error(`cds.lib upload failed: ${uploadCdsLib.stderr || uploadCdsLib.stdout}`);
-
-    const prepareDisplay = await runProcess('ssh', sshArgs(bridge, `cp ${shellQuote(`${bridge.pdkRoot}/display.drf`)} ${shellQuote(remoteDisplayDrf)} 2>/dev/null || true`), 30_000);
-    if (prepareDisplay.exitCode !== 0) throw new Error(`display.drf preparation failed: ${prepareDisplay.stderr || prepareDisplay.stdout}`);
 
     const launchCommand = buildDetachedCadenceCommand(bridge, remoteDir, remoteWrapper, remoteLog);
     const launch = await runProcess('ssh', sshArgs(bridge, launchCommand), 30_000);
@@ -280,7 +263,11 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     let lastEvidence = '';
     let lastStderr = launch.stderr;
     while (Date.now() - startedAt < bridge.timeoutMs) {
-      const [logFetch, evidenceFetch, launchFetch] = await Promise.all([fetchRemoteText(bridge, remoteLog), fetchRemoteText(bridge, remoteEvidence), fetchRemoteText(bridge, `${remoteDir}/launch.stdout`)]);
+      const [logFetch, evidenceFetch, launchFetch] = await Promise.all([
+        fetchRemoteText(bridge, remoteLog),
+        fetchRemoteText(bridge, remoteEvidence),
+        fetchRemoteText(bridge, `${remoteDir}/launch.stdout`),
+      ]);
       lastLog = logFetch.text;
       lastEvidence = evidenceFetch.text;
       lastStderr = `${launch.stderr}\n${logFetch.stderr}\n${evidenceFetch.stderr}`.trim();
@@ -289,16 +276,48 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
       const combined = `${lastLog}\n${lastEvidence}\n${launchOutput}`;
 
       if (evidence.generatorCompleted && evidence.checkAndSaveEvidence) {
-        return { ...base, status: evidence.errorDetected ? 'failed' : 'succeeded', cadenceExecuted: true, dryRun: false, stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`, stderr: lastStderr, exitCode: null, evidence, notes: evidence.errorDetected ? ['Cadence reached completion markers but captured output also contains an error.'] : ['Virtuoso was launched with an explicit cds.lib, isolated log path, and PDK display.drf; generator completion and dbSave evidence were captured.'] };
+        return {
+          ...base,
+          status: evidence.errorDetected ? 'failed' : 'succeeded',
+          cadenceExecuted: true,
+          dryRun: false,
+          stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`,
+          stderr: lastStderr,
+          exitCode: null,
+          evidence,
+          notes: evidence.errorDetected
+            ? ['Cadence reached completion markers but captured output also contains an error.']
+            : ['Virtuoso was launched from the TSMC PDK root using its existing cds.lib; generator completion and dbSave evidence were captured.'],
+        };
       }
       if (evidence.errorDetected && /ADS_BRIDGE:|\*Error\*|\bFATAL\b/.test(combined)) {
-        return { ...base, status: 'failed', cadenceExecuted: true, dryRun: false, stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`, stderr: lastStderr, exitCode: null, evidence, notes: ['Cadence started, but the isolated runtime reported an execution error before required completion evidence.'] };
+        return {
+          ...base,
+          status: 'failed',
+          cadenceExecuted: true,
+          dryRun: false,
+          stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`,
+          stderr: lastStderr,
+          exitCode: null,
+          evidence,
+          notes: ['Cadence started from the PDK root, but the runtime reported an execution error before required completion evidence.'],
+        };
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, launch.stdout, lastStderr);
-    return { ...base, status: 'timeout', cadenceExecuted: true, dryRun: false, stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`, stderr: lastStderr, exitCode: null, evidence, notes: ['Virtuoso was launched, but required generator/Check & Save evidence was not captured before timeout. Inspect virtuoso.log and launch.stdout in the reported run directory.'] };
+    return {
+      ...base,
+      status: 'timeout',
+      cadenceExecuted: true,
+      dryRun: false,
+      stdout: `${launch.stdout}\n${lastLog}\n${lastEvidence}`,
+      stderr: lastStderr,
+      exitCode: null,
+      evidence,
+      notes: ['Virtuoso was launched from the TSMC PDK root, but required generator/Check & Save evidence was not captured before timeout. Inspect virtuoso.log and launch.stdout in the reported run directory.'],
+    };
   } catch (error) {
     return { ...base, status: 'failed', cadenceExecuted: false, dryRun: false, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: null, evidence: emptyEvidence, notes: ['Cadence execution was not confirmed.'] };
   } finally {
@@ -309,9 +328,9 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
 export async function verifyCadenceBinary(config: CadenceBridgeConfig) {
   if (!config.enabled) return { ok: false, message: 'Cadence bridge is disabled.' };
   try {
-    const result = await execFileAsync('ssh', sshArgs(config, `${shellQuote(config.virtuosoPath)} -W 2>&1`), { timeout: 30_000 });
+    const result = await execFileAsync('ssh', sshArgs(config, `cd ${shellQuote(config.pdkRoot)}; ${shellQuote(config.virtuosoPath)} -W 2>&1`), { timeout: 30_000 });
     const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-    return /IC6\.1\.7|sub-version/i.test(text) ? { ok: true, message: 'Cadence IC6.1.7 Virtuoso executable is reachable.' } : { ok: true, message: 'Cadence executable is reachable and executable.' };
+    return /IC6\.1\.7|sub-version/i.test(text) ? { ok: true, message: 'Cadence IC6.1.7 Virtuoso executable is reachable from the TSMC PDK workspace.' } : { ok: true, message: 'Cadence executable is reachable from the TSMC PDK workspace.' };
   } catch (error: any) {
     return { ok: false, message: error?.stderr || error?.message || 'Cadence executable check failed.' };
   }
