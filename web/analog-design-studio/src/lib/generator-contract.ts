@@ -29,7 +29,7 @@ const contract = (
   placementProcedure,
   devices,
   parameterFields: ['TotalW', 'L', 'NF', 'M'],
-  derivations: { wPerFinger: 'TotalW / NF', totalM: 'NF * M' },
+  derivations: { wPerFinger: 'TotalW / NF'; totalM: 'NF * M' },
 });
 
 export const generatorContracts: Record<string, GeneratorContract> = {
@@ -55,14 +55,14 @@ export const generatorContracts: Record<string, GeneratorContract> = {
   'telescopic-ota': contract(
     'telescopic-ota',
     {
-      id: 'telescopic-v7',
-      label: 'Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il',
-      path: 'canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il',
-      status: 'verified',
-      runbook: 'runbooks/RUN_telescopic_ota_v7_20260812.md',
-      invocation: 'CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812()',
+      id: 'telescopic-v8',
+      label: 'Telescopic_OTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813.il',
+      path: 'canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813.il',
+      status: 'candidate',
+      runbook: 'runbooks/RUN_telescopic_ota_v8_20260813.md',
+      invocation: 'CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813()',
     },
-    'TOTA7_PlaceMOS',
+    'TOTA8_PlaceMOS',
     [
       { device: 'M1', type: 'NMOS' },
       { device: 'M2', type: 'NMOS' },
