@@ -1,13 +1,13 @@
-; TELESCOPIC OTA V8 — NMOS input / differential output / VDC bias — repository canonical
+; TELESCOPIC OTA V8 - NMOS input / differential output / VDC bias - repository canonical
 ; Cadence Virtuoso IC6.1.7 / tsmcN65
-; 
+;
 ; Design specifications:
 ;   VDD = 2.0 V, VSS = 0 V
 ;   PDK = tsmcN65 (2.5V I/O device family: nch_mac/pch_mac)
 ;   DC Gain target = 55 dB
 ;   GBW target = 50 MHz
 ;   CL = 1 pF
-;   Temperature = 27 °C
+;   Temperature = 27 C
 ;   Process corner = TT
 ;   Output = Fully differential
 ;   Bias strategy = VDC sources (no bias mirrors)
@@ -19,15 +19,15 @@
 ;
 ; Repository status: Schematic generated; performance NOT verified.
 ; Evidence: SCH-1426 (no schematic-check errors), SCH-1181 (saved) to be obtained after Check & Save.
-; 
+;
 ; Design inputs are TotalW, L, NF, M.  W/finger is derived internally.
 ; Explicit CDF state: w, l, wf, fingers, simM, totalM, nf, m.
 ; Routing contract: terminal -> local stub -> net label only.
 ; No device-to-device wires are created.
 
 setq(TOTA8_LIB "tsmcN65")
-setq(TOTA8_NMOS "nch_mac")   ; Using 2.5V I/O NMOS for 2V VDD
-setq(TOTA8_PMOS "pch_mac")   ; Using 2.5V I/O PMOS for 2V VDD
+setq(TOTA8_NMOS "nch_mac")
+setq(TOTA8_PMOS "pch_mac")
 setq(TOTA8_STUB 0.75)
 setq(TOTA8_WIRE 0.0625)
 
@@ -41,15 +41,56 @@ procedure(TOTA8_DeriveW(TotalW NF)
     )
 )
 
-; Set all eight CDF fields explicitly and validate readback
+; Numeric coercion for CDF readback. Cadence PCell CDF values may be
+; returned as strings even when the requested value was numeric/text.
+procedure(TOTA8_ToFloat(val)
+    cond(
+        (numberp(val) float(val))
+        (stringp(val)
+            let((parsed)
+                parsed=nil
+                errset(parsed=cdfParseFloatString(val) t)
+                parsed
+            )
+        )
+        (t nil)
+    )
+)
+
+; Compare CDF values numerically when possible, otherwise compare exactly.
+procedure(TOTA8_ValueMatches(gotVal expectVal)
+    let((gotNum expectNum)
+        gotNum=TOTA8_ToFloat(gotVal)
+        expectNum=TOTA8_ToFloat(expectVal)
+        if(gotNum && expectNum
+            then abs(gotNum-expectNum) < 1e-12*max(1.0 abs(expectNum))
+            else equal(gotVal expectVal)
+        )
+    )
+)
+
+; Set all eight CDF fields explicitly and validate readback.
+; This follows the repository-verified CDF contract used by the working
+; pch_mac/nch_mac generator and avoids false failures from numeric/string
+; representation differences in Cadence CDF readback.
 procedure(TOTA8_SetMOS(inst TotalW L NF M)
-    let((cdf WperFinger totalM)
+    let((cdf WperFinger nfInt mInt totalMInt totalM)
         cdf=cdfGetInstCDF(inst)
         unless(cdf error("TOTA8: CDF missing on %s.\n" inst~>name))
-        unless(cdf->w && cdf->l && cdf->wf && cdf->fingers && cdf->simM && cdf->totalM && cdf->nf && cdf->m
-            error("TOTA8: incomplete MOS CDF on %s.\n" inst~>name))
+        unless(cdf->w error("TOTA8: w field missing on %s.\n" inst~>name))
+        unless(cdf->l error("TOTA8: l field missing on %s.\n" inst~>name))
+        unless(cdf->wf error("TOTA8: wf field missing on %s.\n" inst~>name))
+        unless(cdf->fingers error("TOTA8: fingers field missing on %s.\n" inst~>name))
+        unless(cdf->simM error("TOTA8: simM field missing on %s.\n" inst~>name))
+        unless(cdf->totalM error("TOTA8: totalM field missing on %s.\n" inst~>name))
+        unless(cdf->nf error("TOTA8: nf field missing on %s.\n" inst~>name))
+        unless(cdf->m error("TOTA8: m field missing on %s.\n" inst~>name))
         WperFinger=TOTA8_DeriveW(TotalW NF)
-        totalM=sprintf(nil "%d" (atoi(NF) * atoi(M)))
+        nfInt=atoi(NF)
+        mInt=atoi(M)
+        totalMInt=nfInt*mInt
+        totalM=sprintf(nil "%d" totalMInt)
+
         cdf->w->value=WperFinger
         cdf->l->value=L
         cdf->wf->value=TotalW
@@ -58,14 +99,25 @@ procedure(TOTA8_SetMOS(inst TotalW L NF M)
         cdf->totalM->value=totalM
         cdf->nf->value=NF
         cdf->m->value=M
-        unless(equal(cdf->w->value WperFinger) && equal(cdf->l->value L) && equal(cdf->wf->value TotalW)
-            error("TOTA8: width/length CDF readback mismatch on %s.\n" inst~>name))
-        unless(equal(cdf->fingers->value NF) && equal(cdf->simM->value M) && equal(cdf->totalM->value totalM)
-            error("TOTA8: multiplicity CDF readback mismatch on %s.\n" inst~>name))
-        unless(equal(cdf->nf->value NF) && equal(cdf->m->value M)
-            error("TOTA8: nf/m CDF readback mismatch on %s.\n" inst~>name))
-        printf("TOTA8: %s TotalW=%s W/finger=%s L=%s NF=%s M=%s totalM=%s\n"
-            inst~>name TotalW WperFinger L NF M totalM)
+
+        printf("TOTA8: %s TotalW=%s W/finger=%s L=%s NF=%s M=%s WF=%L totalM=%L\n"
+            inst~>name TotalW WperFinger L NF M cdf->wf->value cdf->totalM->value)
+        unless(TOTA8_ValueMatches(cdf->w->value WperFinger)
+            error("TOTA8: W mismatch on %s: got %L expected %L.\n" inst~>name cdf->w->value WperFinger))
+        unless(TOTA8_ValueMatches(cdf->l->value L)
+            error("TOTA8: L mismatch on %s: got %L expected %L.\n" inst~>name cdf->l->value L))
+        unless(TOTA8_ValueMatches(cdf->wf->value TotalW)
+            error("TOTA8: WF mismatch on %s: got %L expected %L.\n" inst~>name cdf->wf->value TotalW))
+        unless(TOTA8_ValueMatches(cdf->fingers->value NF)
+            error("TOTA8: fingers mismatch on %s: got %L expected %L.\n" inst~>name cdf->fingers->value NF))
+        unless(TOTA8_ValueMatches(cdf->simM->value M)
+            error("TOTA8: simM mismatch on %s: got %L expected %L.\n" inst~>name cdf->simM->value M))
+        unless(TOTA8_ValueMatches(cdf->totalM->value totalM)
+            error("TOTA8: totalM mismatch on %s: got %L expected %L.\n" inst~>name cdf->totalM->value totalM))
+        unless(TOTA8_ValueMatches(cdf->nf->value NF)
+            error("TOTA8: nf mismatch on %s: got %L expected %L.\n" inst~>name cdf->nf->value NF))
+        unless(TOTA8_ValueMatches(cdf->m->value M)
+            error("TOTA8: m mismatch on %s: got %L expected %L.\n" inst~>name cdf->m->value M))
         t
     )
 )
@@ -126,7 +178,7 @@ procedure(TOTA8_LabelTerminal(cv inst pinName netName)
     )
 )
 
-; Create a VDC terminal stub and net label. analogLib/vdc uses PLUS/MINUS, not MOS G/B/S/D.
+; Create a VDC terminal stub and net label. analogLib/vdc uses PLUS/MINUS.
 procedure(TOTA8_LabelVDCTerminal(cv inst pinName netName)
     let((p e wire label dy)
         unless(equal(pinName "PLUS") || equal(pinName "MINUS")
@@ -198,8 +250,8 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260
         printf("Corner/T  : TT / 27C\n")
         printf("Output    : VOUTP / VOUTN (differential)\n")
         printf("CMFB      : NONE\n")
-        printf("Power     : ~84µW (auto-derived)\n")
-        printf("SR        : ~42 V/µs (auto-derived)\n")
+        printf("Power     : ~84uW (auto-derived)\n")
+        printf("SR        : ~42 V/us (auto-derived)\n")
         printf("ICMR      : ~0.45V to ~1.10V (estimated)\n")
         printf("Swing     : ~0.67Vpp (estimated single-ended)\n")
         printf("Bias      : analogLib/vdc instances\n")
@@ -216,19 +268,19 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260
         unless(nmos && pmos && vdcMaster && pinMaster error("TOTA8: required symbol master is unavailable.\n"))
 
         ; Place transistors with approved TotalW/L/NF/M sizing
-        ; M7, M8: PMOS cascode (load side) - TotalW=11µm, L=0.4µm, NF=2, M=1
+        ; M7, M8: PMOS cascode (load side) - TotalW=11um, L=0.4um, NF=2, M=1
         M7=TOTA8_PlaceMOS(cv pmos "M7" -5:10 "11u" "0.4" "2" "1" "R0")
         M8=TOTA8_PlaceMOS(cv pmos "M8" 5:10 "11u" "0.4" "2" "1" "R0")
-        ; M5, M6: PMOS current source (load) - TotalW=16µm, L=0.6µm, NF=4, M=1
+        ; M5, M6: PMOS current source (load) - TotalW=16um, L=0.6um, NF=4, M=1
         M5=TOTA8_PlaceMOS(cv pmos "M5" -5:6 "16u" "0.6" "4" "1" "R0")
         M6=TOTA8_PlaceMOS(cv pmos "M6" 5:6 "16u" "0.6" "4" "1" "R0")
-        ; M3, M4: NMOS cascode - TotalW=5µm, L=0.4µm, NF=1, M=1
+        ; M3, M4: NMOS cascode - TotalW=5um, L=0.4um, NF=1, M=1
         M3=TOTA8_PlaceMOS(cv nmos "M3" -5:2 "5u" "0.4" "1" "1" "R0")
         M4=TOTA8_PlaceMOS(cv nmos "M4" 5:2 "5u" "0.4" "1" "1" "R0")
-        ; M1, M2: NMOS differential input pair - TotalW=12µm, L=0.5µm, NF=4, M=1
+        ; M1, M2: NMOS differential input pair - TotalW=12um, L=0.5um, NF=4, M=1
         M1=TOTA8_PlaceMOS(cv nmos "M1" -5:-2 "12u" "0.5" "4" "1" "R0")
         M2=TOTA8_PlaceMOS(cv nmos "M2" 5:-2 "12u" "0.5" "4" "1" "R0")
-        ; M9: NMOS tail current source - TotalW=13µm, L=0.6µm, NF=2, M=1
+        ; M9: NMOS tail current source - TotalW=13um, L=0.6um, NF=2, M=1
         M9=TOTA8_PlaceMOS(cv nmos "M9" 0:-6 "13u" "0.6" "2" "1" "R0")
 
         ; Create isolation stubs and net labels (terminal -> stub -> label)
