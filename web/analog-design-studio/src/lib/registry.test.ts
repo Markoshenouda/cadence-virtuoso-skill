@@ -17,10 +17,11 @@ describe('Analog Design Studio repository model', () => {
     expect(t?.generator.path).toBe('canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il');
     expect(t?.generator.invocation).toContain('Create5TOTA_PMOS_TOTALW_V2_20260812');
   });
-  it('resolves the canonical Telescopic V7 generator', () => {
+  it('resolves the canonical Telescopic V8 generator', () => {
     const t = getTopology('ota', 'telescopic-ota');
-    expect(t?.generator.status).toBe('verified');
-    expect(t?.generator.path).toContain('Telescopic_OTA_NMOS_Diff_TotalW_V7');
+    expect(t?.generator.status).toBe('candidate');
+    expect(t?.generator.path).toContain('Telescopic_OTA_NMOS_Diff_TotalW_V8');
+    expect(t?.generator.invocation).toContain('CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813');
   });
   it('maps the Folded Cascode candidate without upgrading its status', () => {
     const t = getTopology('ota', 'folded-cascode-ota');
