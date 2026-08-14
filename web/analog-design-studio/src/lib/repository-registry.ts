@@ -51,10 +51,10 @@ const folded: Topology = {
   inputType: 'NMOS differential input', deviceCount: 11,
   generator: {
     id: 'folded-totalw-v1', label: 'Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il',
-    path: 'canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il', status: 'candidate',
+    path: 'canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il', status: 'verified',
     runbook: 'runbooks/RUN_Folded_Cascode_OTA_TotalW_V1_20260814.md',
     invocation: 'CreateFoldedCascodeOTA_NMOS_TotalW_V1_20260814()',
-    notes: 'Current TotalW-first candidate. Not Cadence-verified yet and performance is not verified.'
+    notes: 'User-confirmed working in the target Cadence Virtuoso IC6.1.7 / tsmcN65 environment. Schematic generation is verified; electrical performance remains unverified.'
   },
   devices: ['M1/M2: input pair', 'M3/M4: PMOS top pair', 'M5/M6: PMOS folded pair', 'M7/M8: NMOS folded pair', 'M9/M10: NMOS sinks', 'M11: NMOS tail'],
   nets: ['VINP', 'VINN', 'VOUT', 'NLEFT', 'NRIGHT', 'FOLD_L', 'VDD', 'VSS', 'VBP1', 'VBP2', 'VBN1', 'VBN2', 'VBN_TAIL']
