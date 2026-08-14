@@ -16,6 +16,7 @@ export type CadenceBridgeConfig = {
   remoteWorkdir: string;
   virtuosoPath: string;
   cadenceRoot: string;
+  pdkRoot: string;
   display: string;
   library: string;
   timeoutMs: number;
@@ -31,7 +32,7 @@ export type CadenceExecutionResult = {
   topologyId: string;
   technologyId: string;
   sourceGenerator: string;
-  remoteFiles: { artifact: string; wrapper: string; log: string; evidence: string };
+  remoteFiles: { artifact: string; wrapper: string; log: string; evidence: string; cdsLib: string };
   command: string[];
   stdout: string;
   stderr: string;
@@ -40,6 +41,7 @@ export type CadenceExecutionResult = {
     processStarted: boolean;
     processExited: boolean;
     generatorCompleted: boolean;
+    checkAndSaveRequested: boolean;
     checkAndSaveEvidence: boolean;
     errorDetected: boolean;
     warningDetected: boolean;
@@ -50,6 +52,7 @@ export type CadenceExecutionResult = {
 
 const DEFAULT_VIRTUOSO = '/usr/local/cadence/IC617/tools/dfII/bin/virtuoso';
 const DEFAULT_CADENCE_ROOT = '/usr/local/cadence/IC617';
+const DEFAULT_PDK_ROOT = '/home/cadence/Desktop/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914';
 const DEFAULT_TIMEOUT = 180_000;
 const SAFE_REMOTE = /^\/[A-Za-z0-9_./-]+$/;
 const SAFE_HOST = /^[A-Za-z0-9._:-]+$/;
@@ -77,6 +80,7 @@ export function getCadenceBridgeConfig(env: NodeJS.ProcessEnv = process.env): Ca
     remoteWorkdir: env.CADENCE_REMOTE_WORKDIR ?? '/home/cadence/Desktop/analog-design-studio-runs',
     virtuosoPath: env.CADENCE_VIRTUOSO_PATH ?? DEFAULT_VIRTUOSO,
     cadenceRoot: env.CADENCE_ROOT ?? DEFAULT_CADENCE_ROOT,
+    pdkRoot: env.CADENCE_PDK_ROOT ?? DEFAULT_PDK_ROOT,
     display: env.CADENCE_DISPLAY ?? ':0',
     library: env.CADENCE_LIBRARY ?? 'BGR_ADI',
     timeoutMs: positiveInt(env.CADENCE_TIMEOUT_MS, DEFAULT_TIMEOUT),
@@ -87,6 +91,7 @@ export function getCadenceBridgeConfig(env: NodeJS.ProcessEnv = process.env): Ca
   requireSafe(config.remoteWorkdir, SAFE_REMOTE, 'remoteWorkdir');
   requireSafe(config.virtuosoPath, SAFE_REMOTE, 'virtuosoPath');
   requireSafe(config.cadenceRoot, SAFE_REMOTE, 'cadenceRoot');
+  requireSafe(config.pdkRoot, SAFE_REMOTE, 'pdkRoot');
   requireSafe(config.library, SAFE_TOKEN, 'library');
   if (!/^:[0-9]+$/.test(config.display)) throw new Error('CADENCE_DISPLAY must look like :0, :1, etc.');
   if (config.sshKeyPath) requireSafe(config.sshKeyPath, /^[A-Za-z0-9_./:\\-]+$/, 'CADENCE_SSH_KEY');
@@ -129,6 +134,19 @@ function runProcess(file: string, args: string[], timeoutMs: number) {
   });
 }
 
+function buildRuntimeCdsLib(config: CadenceBridgeConfig) {
+  return [
+    '# Analog Design Studio runtime cds.lib',
+    '# Generated automatically for this execution run.',
+    'DEFINE cdsDefTechLib $CDSHOME/tools/dfII/etc/cdsDefTechLib',
+    'DEFINE basic $CDSHOME/tools/dfII/etc/cdslib/basic',
+    'DEFINE analogLib $CDSHOME/tools/dfII/etc/cdslib/artist/analogLib',
+    `DEFINE tsmcN65 ${config.pdkRoot}/tsmcN65`,
+    `DEFINE BGR_ADI ${config.pdkRoot}/BGR_ADI`,
+    '',
+  ].join('\n');
+}
+
 export function buildCadenceWrapper(args: {
   artifactRemotePath: string;
   invocation: string;
@@ -153,6 +171,7 @@ export function buildCadenceWrapper(args: {
     `    printf("ADS_BRIDGE_START topology=${cell}\\n")`,
     `    load(${JSON.stringify(artifactRemotePath)})`,
     '    unless(geGetEditCellView() error("ADS_BRIDGE: no editable cellView is active.\\n"))',
+    '    printf("ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED\\n")',
     `    result = ${invocation}`,
     '    unless(result error("ADS_BRIDGE: repository generator returned nil.\\n"))',
     '    cv = geGetEditCellView()',
@@ -178,6 +197,7 @@ export function parseCadenceEvidence(log: string, stdout = '', stderr = '') {
     processStarted: /ADS_BRIDGE_START/.test(combined),
     processExited: /ADS_BRIDGE_GENERATOR_DONE/.test(combined),
     generatorCompleted: /ADS_BRIDGE_GENERATOR_DONE/.test(combined),
+    checkAndSaveRequested: /ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED/.test(combined),
     checkAndSaveEvidence: /ADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED|CHECK_AND_SAVE=dbSave_completed/.test(combined),
     errorDetected: /(?:\*Error\*|\bFATAL\b|\bERROR\b)/.test(combined),
     warningDetected: /(?:\*WARNING\*|\bWARNING\b)/.test(combined),
@@ -191,7 +211,14 @@ async function fetchRemoteText(config: CadenceBridgeConfig, remotePath: string) 
 }
 
 export function buildDetachedCadenceCommand(config: CadenceBridgeConfig, remoteDir: string, remoteWrapper: string, remoteLog: string) {
-  return `cd ${shellQuote(remoteDir)}; export DISPLAY=${shellQuote(config.display)}; export CDS_ROOT=${shellQuote(config.cadenceRoot)}; nohup ${shellQuote(config.virtuosoPath)} -restore ${shellQuote(remoteWrapper)} > ${shellQuote(remoteLog)} 2>&1 < /dev/null & echo $!`;
+  return [
+    `cd ${shellQuote(remoteDir)}`,
+    `export DISPLAY=${shellQuote(config.display)}`,
+    `export CDS_ROOT=${shellQuote(config.cadenceRoot)}`,
+    `export CDSHOME=${shellQuote(config.cadenceRoot)}`,
+    `export CDS_LIB_PATH=${shellQuote(`${remoteDir}/cds.lib`)}`,
+    `nohup ${shellQuote(config.virtuosoPath)} -restore ${shellQuote(remoteWrapper)} > ${shellQuote(remoteLog)} 2>&1 < /dev/null & echo $!`,
+  ].join('; ');
 }
 
 export async function executeCadence(config: DesignConfig, options: { dryRun?: boolean; bridge?: CadenceBridgeConfig } = {}): Promise<CadenceExecutionResult> {
@@ -204,21 +231,24 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
   const remoteWrapper = `${remoteDir}/run.restore.il`;
   const remoteLog = `${remoteDir}/virtuoso.log`;
   const remoteEvidence = `${remoteDir}/evidence.txt`;
+  const remoteCdsLib = `${remoteDir}/cds.lib`;
   const targetCell = `${safeName(config.topologyId)}_ADS_${Date.now()}`;
   const command = [bridge.virtuosoPath, '-restore', remoteWrapper];
-  const emptyEvidence = { processStarted: false, processExited: false, generatorCompleted: false, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false };
-  const base = { topologyId: config.topologyId, technologyId: config.technologyId, sourceGenerator: contract.source.path, remoteFiles: { artifact: remoteArtifact, wrapper: remoteWrapper, log: remoteLog, evidence: remoteEvidence }, command };
+  const emptyEvidence = { processStarted: false, processExited: false, generatorCompleted: false, checkAndSaveRequested: false, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false };
+  const base = { topologyId: config.topologyId, technologyId: config.technologyId, sourceGenerator: contract.source.path, remoteFiles: { artifact: remoteArtifact, wrapper: remoteWrapper, log: remoteLog, evidence: remoteEvidence, cdsLib: remoteCdsLib }, command };
 
   if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence, notes: ['Bridge is disabled. Set CADENCE_BRIDGE_ENABLED=true to allow local execution.'] };
-  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`] };
+  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { ...emptyEvidence, checkAndSaveRequested: true }, notes: ['Dry-run: no SSH/SCP/Virtuoso process was started.', `Target cell would be ${bridge.library}/${targetCell}/schematic.`, `Runtime cds.lib would map tsmcN65 and BGR_ADI from ${bridge.pdkRoot}.`] };
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'analog-design-studio-'));
   const localArtifact = path.join(tempDir, artifact.filename);
   const localWrapper = path.join(tempDir, 'run.restore.il');
+  const localCdsLib = path.join(tempDir, 'cds.lib');
   const startedAt = Date.now();
   try {
     await writeFile(localArtifact, artifact.content, 'utf8');
     await writeFile(localWrapper, buildCadenceWrapper({ artifactRemotePath: remoteArtifact, invocation: contract.source.invocation, library: bridge.library, cell: targetCell, view: 'schematic', evidencePath: remoteEvidence }), 'utf8');
+    await writeFile(localCdsLib, buildRuntimeCdsLib(bridge), 'utf8');
 
     const mkdir = await runProcess('ssh', sshArgs(bridge, `mkdir -p ${shellQuote(remoteDir)}`), 30_000);
     if (mkdir.exitCode !== 0) throw new Error(`Remote staging directory failed: ${mkdir.stderr || mkdir.stdout}`);
@@ -226,6 +256,8 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     if (uploadArtifact.exitCode !== 0) throw new Error(`Artifact upload failed: ${uploadArtifact.stderr || uploadArtifact.stdout}`);
     const uploadWrapper = await runProcess('scp', scpArgs(bridge, localWrapper, remoteWrapper), 60_000);
     if (uploadWrapper.exitCode !== 0) throw new Error(`Wrapper upload failed: ${uploadWrapper.stderr || uploadWrapper.stdout}`);
+    const uploadCdsLib = await runProcess('scp', scpArgs(bridge, localCdsLib, remoteCdsLib), 60_000);
+    if (uploadCdsLib.exitCode !== 0) throw new Error(`cds.lib upload failed: ${uploadCdsLib.stderr || uploadCdsLib.stdout}`);
 
     const launchCommand = buildDetachedCadenceCommand(bridge, remoteDir, remoteWrapper, remoteLog);
     const launch = await runProcess('ssh', sshArgs(bridge, launchCommand), 30_000);
