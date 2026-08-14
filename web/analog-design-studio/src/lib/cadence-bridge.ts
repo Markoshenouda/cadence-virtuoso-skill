@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -47,6 +47,7 @@ export type CadenceExecutionResult = {
 const DEFAULT_VIRTUOSO = '/usr/local/cadence/IC617/tools/dfII/bin/virtuoso';
 const DEFAULT_TIMEOUT = 180_000;
 const SAFE_REMOTE = /^[A-Za-z0-9_./-]+$/;
+const SAFE_HOST = /^[A-Za-z0-9._:-]+$/;
 
 function envBool(value: string | undefined, fallback = false) {
   if (value === undefined) return fallback;
@@ -63,8 +64,11 @@ export function getCadenceBridgeConfig(env: NodeJS.ProcessEnv = process.env): Ca
   const host = env.CADENCE_SSH_HOST ?? '192.168.75.217';
   const user = env.CADENCE_SSH_USER ?? 'cadence';
   const virtuosoPath = env.CADENCE_VIRTUOSO_PATH ?? DEFAULT_VIRTUOSO;
-  if (![host, user, remoteWorkdir, virtuosoPath].every((v) => v && SAFE_REMOTE.test(v))) {
-    throw new Error('Cadence bridge configuration contains an unsafe path or host value.');
+  if (!SAFE_HOST.test(host) || !SAFE_REMOTE.test(remoteWorkdir) || !SAFE_REMOTE.test(virtuosoPath) || !/^[A-Za-z0-9._-]+$/.test(user)) {
+    throw new Error('Cadence bridge configuration contains an unsafe host, user, path, or executable value.');
+  }
+  if (env.CADENCE_SSH_KEY && !SAFE_REMOTE.test(env.CADENCE_SSH_KEY)) {
+    throw new Error('CADENCE_SSH_KEY must be a simple local filesystem path without shell metacharacters.');
   }
   return {
     enabled: envBool(env.CADENCE_BRIDGE_ENABLED),
@@ -125,19 +129,19 @@ export function buildCadenceWrapper(artifactRemotePath: string, invocation: stri
   }
   if (!SAFE_REMOTE.test(artifactRemotePath)) throw new Error('Unsafe remote artifact path.');
   return [
-    `printf("ADS_BRIDGE_START topology generator\\n")`,
+    'printf("ADS_BRIDGE_START topology generator\\n")',
     `load(${JSON.stringify(artifactRemotePath)})`,
-    `${invocation}`,
-    `printf("ADS_BRIDGE_GENERATOR_DONE\\n")`,
-    `printf("ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED\\n")`,
-    `exit()`,
+    invocation,
+    'printf("ADS_BRIDGE_GENERATOR_DONE\\n")',
+    'printf("ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED\\n")',
+    'exit()',
     '',
   ].join('\n');
 }
 
 export function parseCadenceEvidence(log: string, stdout = '', stderr = '') {
   const combined = `${log}\n${stdout}\n${stderr}`;
-  const errorDetected = /(?:^|\n).*?(?:ERROR|Error|*Error*|FATAL|fatal)/.test(combined);
+  const errorDetected = /(?:ERROR|FATAL|\*Error\*|Error:)/.test(combined);
   const warningDetected = /(?:WARNING|Warning|WARN)/.test(combined);
   return {
     processStarted: /ADS_BRIDGE_START/.test(combined),
@@ -160,6 +164,7 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
   const remoteWrapper = `${remoteDir}/run.restore.il`;
   const remoteLog = `${remoteDir}/virtuoso.log`;
   const command = [bridge.virtuosoPath, '-nograph', '-restore', remoteWrapper, '-log', remoteLog];
+  const emptyEvidence = { processStarted: false, processExited: false, checkAndSaveRequested: false, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false };
   const base = {
     topologyId: config.topologyId,
     technologyId: config.technologyId,
@@ -168,8 +173,8 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     command,
   };
 
-  if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: { processStarted: false, processExited: false, checkAndSaveRequested: false, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false } };
-  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { processStarted: false, processExited: false, checkAndSaveRequested: true, checkAndSaveEvidence: false, errorDetected: false, warningDetected: false, logCaptured: false } };
+  if (!bridge.enabled) return { ...base, status: options.dryRun ? 'dry-run' : 'disabled', cadenceExecuted: false, dryRun: Boolean(options.dryRun), stdout: '', stderr: '', exitCode: null, evidence: emptyEvidence };
+  if (options.dryRun) return { ...base, status: 'dry-run', cadenceExecuted: false, dryRun: true, stdout: '', stderr: '', exitCode: null, evidence: { ...emptyEvidence, checkAndSaveRequested: true } };
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'analog-design-studio-'));
   const localArtifact = path.join(tempDir, artifact.filename);
@@ -184,12 +189,17 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
     const uploadWrapper = await runProcess('scp', scpArgs(bridge, localWrapper, remoteWrapper), 60_000);
     if (uploadWrapper.exitCode !== 0) throw new Error(`Wrapper upload failed: ${uploadWrapper.stderr || uploadWrapper.stdout}`);
     const remoteCommand = `cd ${shellQuote(remoteDir)} && exec ${command.map(shellQuote).join(' ')}`;
-    const execution = await runProcess('ssh', (() => { const args: string[] = []; if (bridge.sshKeyPath) args.push('-i', bridge.sshKeyPath); args.push(`${bridge.user}@${bridge.host}`, remoteCommand); return args; })(), bridge.timeoutMs);
+    const sshExecArgs: string[] = [];
+    if (bridge.sshKeyPath) sshExecArgs.push('-i', bridge.sshKeyPath);
+    sshExecArgs.push(`${bridge.user}@${bridge.host}`, remoteCommand);
+    const execution = await runProcess('ssh', sshExecArgs, bridge.timeoutMs);
     const logFetch = await runProcess('ssh', sshArgs(bridge, ['cat', remoteLog]), 30_000);
     const log = `${logFetch.stdout}${logFetch.stderr}`;
     const evidence = parseCadenceEvidence(log, execution.stdout, execution.stderr);
     const status: CadenceExecutionStatus = execution.timedOut ? 'timeout' : execution.exitCode === 0 && evidence.processStarted && evidence.processExited && !evidence.errorDetected ? 'succeeded' : 'failed';
     return { ...base, status, cadenceExecuted: true, dryRun: false, stdout: execution.stdout, stderr: execution.stderr, exitCode: execution.exitCode, evidence };
+  } catch (error) {
+    return { ...base, status: 'failed', cadenceExecuted: false, dryRun: false, stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: null, evidence: emptyEvidence };
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -197,6 +207,10 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
 
 export async function verifyCadenceBinary(config: CadenceBridgeConfig) {
   if (!config.enabled) return { ok: false, message: 'Cadence bridge is disabled.' };
-  const result = await execFileAsync('ssh', sshArgs(config, ['test', '-x', config.virtuosoPath]), { timeout: 30_000 }).catch((error: any) => ({ stdout: '', stderr: error?.message ?? String(error) }));
-  return { ok: !('stderr' in result) || !result.stderr, message: ('stderr' in result && result.stderr) ? result.stderr : 'Cadence executable is reachable.' };
+  try {
+    await execFileAsync('ssh', sshArgs(config, ['test', '-x', config.virtuosoPath]), { timeout: 30_000 });
+    return { ok: true, message: 'Cadence executable is reachable and executable.' };
+  } catch (error: any) {
+    return { ok: false, message: error?.stderr || error?.message || 'Cadence executable check failed.' };
+  }
 }
