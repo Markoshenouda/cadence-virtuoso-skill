@@ -98,20 +98,22 @@ describe('Phase 4 Cadence execution bridge', () => {
     expect(evidence.errorDetected).toBe(true);
   });
 
-  it('builds an isolated GUI launch command with explicit cds.lib and log path', () => {
+  it('launches Virtuoso from the TSMC PDK root and uses its real cds.lib', () => {
     const command = buildDetachedCadenceCommand(
       bridge,
       '/home/cadence/Desktop/analog-design-studio-runs/test_run',
       '/home/cadence/Desktop/analog-design-studio-runs/test_run/run.restore.il',
       '/home/cadence/Desktop/analog-design-studio-runs/test_run/virtuoso.log',
     );
+    expect(command).toContain("cd '/home/cadence/Desktop/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914'");
     expect(command).toContain("export DISPLAY=':0'");
     expect(command).toContain("export CDS_ROOT='/usr/local/cadence/IC617'");
     expect(command).toContain("export CDSHOME='/usr/local/cadence/IC617'");
-    expect(command).toContain("export CDS_LOG_PATH='/home/cadence/Desktop/analog-design-studio-runs/test_run'");
-    expect(command).toContain("export HOME='/home/cadence/Desktop/analog-design-studio-runs/test_run/.cadence-home'");
-    expect(command).toContain("-cdslib '/home/cadence/Desktop/analog-design-studio-runs/test_run/cds.lib'");
+    expect(command).toContain("export CDS_LIB_PATH='/home/cadence/Desktop/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914/cds.lib'");
+    expect(command).toContain("-cdslib '/home/cadence/Desktop/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914/cds.lib'");
+    expect(command).toContain("-restore '/home/cadence/Desktop/analog-design-studio-runs/test_run/run.restore.il'");
     expect(command).toContain("-log '/home/cadence/Desktop/analog-design-studio-runs/test_run/virtuoso.log'");
+    expect(command).not.toContain('cd /home/cadence/Desktop/analog-design-studio-runs/test_run;');
     expect(command).not.toContain('-nograph');
   });
 
@@ -120,8 +122,8 @@ describe('Phase 4 Cadence execution bridge', () => {
     expect(result.status).toBe('dry-run');
     expect(result.cadenceExecuted).toBe(false);
     expect(result.evidence.checkAndSaveRequested).toBe(true);
-    expect(result.remoteFiles.cdsLib).toContain('/cds.lib');
-    expect(result.remoteFiles.displayDrf).toContain('/display.drf');
+    expect(result.remoteFiles.cdsLib).toBe(`${bridge.pdkRoot}/cds.lib`);
+    expect(result.remoteFiles.displayDrf).toBe(`${bridge.pdkRoot}/display.drf`);
     expect(result.command).toEqual(['/usr/local/cadence/IC617/tools/dfII/bin/virtuoso', '-cdslib', result.remoteFiles.cdsLib, '-restore', result.remoteFiles.wrapper, '-log', result.remoteFiles.log]);
   });
 
