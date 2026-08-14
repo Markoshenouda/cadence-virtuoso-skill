@@ -6,4 +6,4 @@ This archive preserves copies of every generator, test, and runbook that existed
 - `tests/` — preserved regression `.il` tests.
 - `runbooks/` — preserved versioned execution notes.
 
-The canonical copies are in `canonical/`. The original paths remain in place for compatibility.
+The canonical copies are in `canonical/`. Superseded Telescopic TotalW V1/V2 artifacts are retained here after V7 became canonical; history must not override the authority map.
