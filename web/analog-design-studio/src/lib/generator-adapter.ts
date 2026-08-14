@@ -115,8 +115,11 @@ function normalizeCadenceCompatibility(source: string) {
  * Cadence IC6.1.7's legacy reader is not UTF-8 safe for arbitrary Unicode
  * source text. Keep the canonical generator readable, but emit an ASCII-only
  * execution artifact to the bridge.
+ *
+ * Exported for direct unit testing and for any caller that needs to sanitize
+ * an execution-bound SKILL fragment without running the full generator flow.
  */
-function sanitizeCadenceText(source: string) {
+export function sanitizeCadenceIL(source: string) {
   const replacements: Record<string, string> = {
     'µ': 'u',
     'μ': 'u',
@@ -182,8 +185,8 @@ export async function generateParameterizedArtifact(config: DesignConfig): Promi
   const contract = getGeneratorContract(config.topologyId, config.technologyId);
   const { content: canonical } = await readCanonicalGenerator(contract);
   const parameterized = parameterizeCanonicalGenerator(canonical, config, contract);
-  const generated = sanitizeCadenceText(normalizeCadenceCompatibility(parameterized));
-  const provenance = sanitizeCadenceText([
+  const generated = sanitizeCadenceIL(normalizeCadenceCompatibility(parameterized));
+  const provenance = sanitizeCadenceIL([
     '; ============================================================',
     '; Analog Design Studio - Parameterized Generator Artifact',
     `; Topology      : ${config.topologyId}`,
