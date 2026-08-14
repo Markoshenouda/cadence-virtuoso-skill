@@ -29,7 +29,7 @@ const contract = (
   placementProcedure,
   devices,
   parameterFields: ['TotalW', 'L', 'NF', 'M'],
-  derivations: { wPerFinger: 'TotalW / NF'; totalM: 'NF * M' },
+  derivations: { wPerFinger: 'TotalW / NF', totalM: 'NF * M' },
 });
 
 export const generatorContracts: Record<string, GeneratorContract> = {
