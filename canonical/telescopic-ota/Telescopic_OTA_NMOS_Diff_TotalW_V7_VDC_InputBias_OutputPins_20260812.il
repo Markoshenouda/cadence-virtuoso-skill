@@ -25,6 +25,19 @@ procedure(TOTA7_DeriveW(TotalW NF)
     )
 )
 
+; Compare CDF physical values numerically instead of requiring identical
+; string representations. Cadence PCells may normalize values such as
+; "1u" into a different but physically equivalent CDF representation.
+; Keep the expression deliberately simple because IC6.1.7 SKILL parsing
+; is sensitive to nested prefix arithmetic expressions.
+procedure(TOTA7_CDFValueMatches(actual expected)
+    let((a e)
+        a=cdfParseFloatString(actual)
+        e=cdfParseFloatString(expected)
+        if(abs(a-e) <= 1e-9 then t else nil)
+    )
+)
+
 procedure(TOTA7_SetMOS(inst TotalW L NF M)
     let((cdf WperFinger totalM)
         cdf=cdfGetInstCDF(inst)
@@ -33,6 +46,7 @@ procedure(TOTA7_SetMOS(inst TotalW L NF M)
             error("TOTA7: incomplete MOS CDF on %s.\n" inst~>name))
         WperFinger=TOTA7_DeriveW(TotalW NF)
         totalM=sprintf(nil "%d" (atoi(NF) * atoi(M)))
+
         cdf->w->value=WperFinger
         cdf->l->value=L
         cdf->wf->value=TotalW
@@ -41,8 +55,16 @@ procedure(TOTA7_SetMOS(inst TotalW L NF M)
         cdf->totalM->value=totalM
         cdf->nf->value=NF
         cdf->m->value=M
-        unless(equal(cdf->w->value WperFinger) && equal(cdf->l->value L) && equal(cdf->wf->value TotalW)
-            error("TOTA7: width/length CDF readback mismatch on %s.\n" inst~>name))
+
+        unless(TOTA7_CDFValueMatches(cdf->w->value WperFinger)
+            error("TOTA7: width CDF readback mismatch on %s (expected=%s actual=%s).\n"
+                inst~>name WperFinger cdf->w->value))
+        unless(TOTA7_CDFValueMatches(cdf->l->value L)
+            error("TOTA7: length CDF readback mismatch on %s (expected=%s actual=%s).\n"
+                inst~>name L cdf->l->value))
+        unless(TOTA7_CDFValueMatches(cdf->wf->value TotalW)
+            error("TOTA7: total-width CDF readback mismatch on %s (expected=%s actual=%s).\n"
+                inst~>name TotalW cdf->wf->value))
         unless(equal(cdf->fingers->value NF) && equal(cdf->simM->value M) && equal(cdf->totalM->value totalM)
             error("TOTA7: multiplicity CDF readback mismatch on %s.\n" inst~>name))
         unless(equal(cdf->nf->value NF) && equal(cdf->m->value M)
@@ -175,7 +197,7 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260
         TOTA7_LabelTerminal(cv M1 "G" "VINP") TOTA7_LabelTerminal(cv M1 "D" "NLEFT") TOTA7_LabelTerminal(cv M1 "S" "TAIL") TOTA7_LabelTerminal(cv M1 "B" "VSS")
         TOTA7_LabelTerminal(cv M2 "G" "VINN") TOTA7_LabelTerminal(cv M2 "D" "NRIGHT") TOTA7_LabelTerminal(cv M2 "S" "TAIL") TOTA7_LabelTerminal(cv M2 "B" "VSS")
         TOTA7_LabelTerminal(cv M3 "G" "VBN_CAS") voutpEnd=TOTA7_LabelTerminal(cv M3 "D" "VOUTP") TOTA7_LabelTerminal(cv M3 "S" "NLEFT") TOTA7_LabelTerminal(cv M3 "B" "VSS")
-        TOTA7_LabelTerminal(cv M4 "G" "VBN_CAS") voutnEnd=TOTA7_LabelTerminal(cv M4 "D" "VOUTN") TOTA7_LabelTerminal(cv M4 "S" "NRIGHT") TOTA7_LabelTerminal(cv M4 "B" "VSS")
+        TOTA7_LabelTerminal(cv M4 "G" "VBN_CAS") TOTA7_LabelTerminal(cv M4 "D" "VOUTN") TOTA7_LabelTerminal(cv M4 "S" "NRIGHT") TOTA7_LabelTerminal(cv M4 "B" "VSS")
         TOTA7_LabelTerminal(cv M5 "G" "VBP_CAS") TOTA7_LabelTerminal(cv M5 "D" "VOUTP") TOTA7_LabelTerminal(cv M5 "S" "PLEFT") TOTA7_LabelTerminal(cv M5 "B" "VDD")
         TOTA7_LabelTerminal(cv M6 "G" "VBP_CAS") TOTA7_LabelTerminal(cv M6 "D" "VOUTN") TOTA7_LabelTerminal(cv M6 "S" "PRIGHT") TOTA7_LabelTerminal(cv M6 "B" "VDD")
         TOTA7_LabelTerminal(cv M7 "G" "VBP_LOAD") TOTA7_LabelTerminal(cv M7 "D" "PLEFT") TOTA7_LabelTerminal(cv M7 "S" "VDD") TOTA7_LabelTerminal(cv M7 "B" "VDD")
@@ -192,12 +214,9 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260
         TOTA7_CreateVDC(cv vdcMaster "VINN_SRC" 15:-6 "VINN" "VSS" "0.80")
         TOTA7_CreatePin(cv pinMaster "VOUTP" "output" voutpEnd)
         TOTA7_CreatePin(cv pinMaster "VOUTN" "output" voutnEnd)
+
         dbSave(cv)
-        printf("\n============================================================\n TOTA7 GENERATOR COMPLETED\n============================================================\n")
-        printf("MOS      : M1..M9\nOUTPUTS  : VOUTP / VOUTN\nBIAS VDC : VBN_TAIL / VBN_CAS / VBP_CAS / VBP_LOAD / VINP / VINN\n")
-        printf("POWER VDC: VDD / VSS\nOUTPUT PIN: VOUTP / VOUTN\nWIRING   : local stub + net label ONLY\n")
-        printf("CDF      : w/l/wf/fingers/simM/totalM/nf/m explicit\ntotalM   : NF * M\n")
-        printf("STATUS   : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED\n============================================================\n")
+        printf("TOTA7: SCHEMATIC_GENERATION_COMPLETED\n")
         t
     )
 )

@@ -1,52 +1,223 @@
 # Analog Design Studio MVP
 
-A local web-based engineering interface around the existing `cadence-virtuoso-skill` repository. The web layer is intentionally configuration-first: repository skills, canonical generators, runbooks and sizing conventions remain the source of truth.
+A local web-based engineering interface around the existing `cadence-virtuoso-skill` repository. The web layer is configuration-first: repository skills, canonical generators, runbooks and sizing conventions remain the source of truth.
 
-## What is implemented
+## Implemented
 
-- Dark, engineering-oriented dashboard.
+- Dark engineering-oriented dashboard.
 - New Design wizard: Circuit → Topology → Technology → Specifications → Sizing → Review.
-- Repository-backed OTA metadata for 5T OTA, Telescopic OTA V7, and Folded Cascode TotalW V1.
-- Generator registry/resolver with explicit artifact status (`verified`, `candidate`, `unverified`).
-- Technology metadata for the repository's TSMC N65 platform.
-- Specification validation and explicit target/operator/unit fields.
-- Repository-compatible sizing model: `TotalW`, `L`, `NF`, `M`.
-- SVG topology previews derived from the registered topology model.
-- Result screen that distinguishes configuration/generator resolution from actual Cadence execution.
-- API endpoint at `POST /api/design/resolve` for future backend/agent integration.
-- Vitest coverage for circuit selection, generator resolution, validation, and status boundaries.
+- Repository-backed 5T OTA, Telescopic OTA V7 and Folded Cascode OTA metadata.
+- Explicit generator contracts using `TotalW`, `L`, `NF`, `M`.
+- Safe parameterization of exact canonical MOS placement anchors.
+- Canonical generator preservation.
+- `POST /api/design/resolve` and `POST /api/design/generate`.
+- Local Cadence bridge at `POST/GET /api/cadence/execute`.
+- Dry-run, SSH/SCP staging, fixed Virtuoso invocation, timeout handling and structured evidence.
+- Vitest coverage for registry, validation, contracts, parameterization and bridge safety.
 
 ## Repository integration
 
-The registry is deliberately thin. It points to existing repository artifacts rather than copying their SKILL code into the web application.
-
-Examples:
+The registry points to existing repository artifacts instead of copying SKILL knowledge into the frontend:
 
 ```text
 5T OTA
-  -> canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il
+  canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il
+  invocation: Create5TOTA_PMOS_TOTALW_V2_20260812()
 
-Telescopic OTA
-  -> canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il
+Telescopic OTA V7
+  canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il
+  invocation: CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812()
 
-Folded Cascode OTA
-  -> canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il
+Folded Cascode OTA V1
+  canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il
+  invocation: CreateFoldedCascodeOTA_NMOS_TotalW_V1_20260814()
 ```
 
-The UI never treats a `load()` success or a candidate artifact as performance verification. The repository's own authority map, design contract and runbooks define the actual engineering status.
+Candidate/verified status remains the repository's status. Web execution does not silently upgrade candidate generators to verified.
 
-## Sizing contract
+## Phase 3 — parameterized generator contracts
 
-The UI exposes the repository design-level interface:
+Each topology has an explicit contract containing:
 
 ```text
-TotalW
-L
-NF
-M
+Topology
+Technology
+Canonical source path
+Canonical placement procedure
+Exact device list + polarity
+TotalW / L / NF / M
+W/finger = TotalW / NF
+TotalM = NF × M
 ```
 
-It does not ask the user for per-finger `W`. The repository derives `W/finger = TotalW/NF` and requires the complete CDF state including `w`, `l`, `wf`, `fingers`, `simM`, `totalM`, `nf`, and `m`, with `totalM = NF * M`.
+The adapter only changes the four quoted sizing arguments on exact known placement anchors. Topology, routing, VDC, pins, instance names, coordinates, orientation and repository CDF logic remain sourced from the canonical generator.
+
+Canonical files are never written by the web generator.
+
+## Phase 4 — Cadence Execution Bridge
+
+Phase 4 connects a validated generated `.il` artifact to the user's **local Linux Cadence VM** through SSH/SCP.
+
+The verified environment supplied for this project is:
+
+```text
+SSH host:       192.168.75.219
+SSH user:       cadence
+HOME:           /home/cadence
+DISPLAY:        :0
+Virtuoso:       /usr/local/cadence/IC617/tools/dfII/bin/virtuoso
+Virtuoso -W:    IC6.1.7-64b.78
+CDS_ROOT:       /usr/local/cadence/IC617
+Library:        BGR_ADI
+```
+
+The current runbook used as the reference for the 5T generator loads the `.il` in CIW and calls the repository procedure. The generator itself uses `geGetEditCellView()`, so Phase 4 deliberately uses a **graphical Virtuoso session** with `DISPLAY=:0`; it does not use `-nograph` for the actual generator run.
+
+The execution flow is:
+
+```text
+Web DesignConfig
+      ↓
+Validation
+      ↓
+Parameterized .il
+      ↓
+Local Cadence Bridge
+      ↓
+SSH / SCP
+      ↓
+/home/cadence/Desktop/analog-design-studio-runs/<run>
+      ↓
+run.restore.il
+      ↓
+Virtuoso IC6.1.7 with DISPLAY=:0
+      ↓
+Create target schematic cell
+      ↓
+Open editable schematic window
+      ↓
+load(parameterized .il)
+      ↓
+repository generator invocation
+      ↓
+dbSave
+      ↓
+evidence.txt + Virtuoso log
+```
+
+The bridge uses the invocation from the generator contract. The browser cannot supply an arbitrary shell command.
+
+### Why the bridge opens a fresh target cell
+
+The current canonical generators expect an empty editable schematic context through `geGetEditCellView()`. Phase 4 therefore creates a unique target cell under the configured library and opens it graphically before invoking the generator. This avoids overwriting an existing design and avoids relying on whatever cell happens to be open in a user's desktop session.
+
+### Environment
+
+Copy `.env.example` to `.env.local` for local use. The supplied environment is represented as:
+
+```text
+CADENCE_BRIDGE_ENABLED=false
+CADENCE_SSH_HOST=192.168.75.219
+CADENCE_SSH_USER=cadence
+CADENCE_REMOTE_WORKDIR=/home/cadence/Desktop/analog-design-studio-runs
+CADENCE_ROOT=/usr/local/cadence/IC617
+CADENCE_VIRTUOSO_PATH=/usr/local/cadence/IC617/tools/dfII/bin/virtuoso
+CADENCE_DISPLAY=:0
+CADENCE_LIBRARY=BGR_ADI
+CADENCE_TIMEOUT_MS=180000
+```
+
+Set `CADENCE_BRIDGE_ENABLED=true` only when the Next.js server is running on the trusted local machine that can SSH to the VM. `BatchMode=yes` is used, so password prompts are not accepted; use an SSH key/agent when required.
+
+### Health check
+
+```http
+GET /api/cadence/execute
+```
+
+The endpoint checks whether the configured bridge is enabled and whether the remote Virtuoso executable is reachable/executable.
+
+### Dry run
+
+```http
+POST /api/cadence/execute
+Content-Type: application/json
+
+{
+  "config": <DesignConfig>,
+  "dryRun": true
+}
+```
+
+Dry-run performs no SSH, SCP or Virtuoso execution. It resolves the real generator and returns the intended remote artifact/wrapper paths and command.
+
+### Real execution
+
+```http
+POST /api/cadence/execute
+Content-Type: application/json
+
+{
+  "config": <DesignConfig>,
+  "dryRun": false
+}
+```
+
+The bridge stages:
+
+```text
+<generated>.il
+run.restore.il
+```
+
+The restore script creates/opens a unique schematic cell, makes it the current editable window, loads the generated artifact, calls the exact repository generator procedure, saves the cellview, writes explicit evidence markers, and exits Virtuoso.
+
+### Evidence semantics
+
+The bridge reports `succeeded` only when all of these are true:
+
+```text
+Virtuoso process exited with code 0
+ADS_BRIDGE_START marker present
+ADS_BRIDGE_GENERATOR_DONE marker present
+ADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED marker present
+no detected fatal/error marker
+```
+
+A zero exit code by itself is not enough.
+
+The evidence explicitly records `dbSave_completed`. It is **not** presented as a full GUI Check & Save dialog result. If the repository generator performs its own `dbSave`, that is the evidence captured by this bridge. Full schematic Check & Save automation remains a later refinement if required.
+
+### Security boundary
+
+- Local bridge only.
+- No arbitrary shell command from browser input.
+- Host, user, executable, library and remote paths are validated.
+- Canonical `.il` files remain read-only.
+- Generated artifacts are staged separately.
+- SSH/SCP failures are failures, never success.
+- Execution timeout is explicit.
+- CI never invokes Cadence.
+- Spectre remains disabled.
+
+## API status
+
+```text
+disabled
+  bridge not enabled
+
+dry-run
+  no remote process started
+
+succeeded
+  Virtuoso exited + generator/evidence markers confirmed
+
+failed
+  staging, process, Cadence, or evidence failure
+
+timeout
+  execution exceeded configured timeout
+```
 
 ## Local setup
 
@@ -58,27 +229,30 @@ npm run dev
 
 Then open `http://localhost:3000`.
 
-Production build:
+For production:
 
 ```bash
 npm run build
 npm run start
 ```
 
-Tests:
+For tests:
 
 ```bash
 npm test
 ```
 
-## Adding a new circuit/topology
+CI tests the bridge logic only; it never starts Cadence.
 
-1. Add a metadata entry to `src/lib/repository-registry.ts`.
-2. Point its generator entry to an existing repository path.
-3. Add the real runbook path and exact invocation when available.
-4. Set the artifact status conservatively.
-5. Add or extend validation tests in `src/lib/registry.test.ts`.
-6. Do not copy `.il` generator source into the frontend.
+## Adding a new topology
+
+1. Add repository metadata to `src/lib/repository-registry.ts`.
+2. Point to an existing canonical generator.
+3. Add its exact placement procedure and device/polarity list to `src/lib/generator-contract.ts`.
+4. Keep artifact status conservative.
+5. Add contract/parameterization tests.
+6. Add bridge tests.
+7. Do not modify canonical `.il` files merely to support the web application.
 
 ## Architecture
 
@@ -91,38 +265,56 @@ Validation
    ↓
 Topology / Generator Registry
    ↓
-Repository canonical generator + runbook + skill
+Generator Contract
    ↓
-Future generator execution adapter
+Read-only Canonical .il
    ↓
-Future Cadence / Spectre integration
+Exact Placement-Anchor Parameterization
+   ↓
+Generated .il
+   ↓
+Local Cadence Execution Bridge
+   ↓
+SSH/SCP → Linux VM 192.168.75.219
+   ↓
+Virtuoso IC6.1.7 GUI DISPLAY=:0
+   ↓
+Editable schematic
+   ↓
+Generator + dbSave
+   ↓
+Evidence
+   ↓
+Future Spectre integration
 ```
 
-## Deliberate MVP boundaries
+## Current limitations
 
-Not implemented yet:
-
-- real Cadence Virtuoso execution
-- Spectre simulation
-- simulation-result parsing
-- AI sizing agent
-- optimization loops
-- persistent database
-- authentication/cloud deployment
-- real-time VM control
-
-The generation-result screen therefore reports **ready/resolved**, not **executed in Cadence**.
+- Actual Cadence execution is implemented but still requires a real run on the supplied VM before this project can call it Cadence-verified.
+- Full GUI Check & Save result parsing is not yet implemented; the bridge captures generator completion and `dbSave` evidence.
+- Spectre simulation is not implemented.
+- Simulation-result parsing is not implemented.
+- AI sizing and optimization are not implemented.
+- No persistent database/authentication/cloud deployment.
+- No automatic VM desktop-control protocol.
+- VDC/bias targets are not yet parameterized from performance specifications.
 
 ## Roadmap
 
-### Phase 2 — Generator adapter
-Create a backend execution adapter that accepts a validated `DesignConfig`, resolves the exact repository generator contract, and produces a concrete `.il` artifact without altering canonical engineering files.
+### Phase 1 — configuration-first UI
+Completed.
 
-### Phase 3 — Cadence execution
-Add a controlled local execution bridge for the user's Virtuoso environment and surface CIW/Check & Save evidence.
+### Phase 2 — generator adapter
+Completed.
 
-### Phase 4 — Simulation
-Add Spectre job submission, result parsing and performance dashboards for gain, GBW, phase margin, slew rate, power, noise, PSRR and CMRR.
+### Phase 3 — parameterized generator contracts
+Completed for the three current OTA generators.
 
-### Phase 5 — AI-assisted design
-Connect specification analysis, topology selection and transistor sizing skills behind explicit validation/evidence gates.
+### Phase 4 — Cadence execution
+Implemented; VM-side execution/evidence verification pending.
+
+### Phase 5 — Spectre simulation
+Submit simulations, parse gain/GBW/phase margin/slew/power/noise/PSRR/CMRR and display results.
+
+### Phase 6 — AI-assisted design
+Use the repository's design skills and contracts for topology selection, sizing and optimization behind explicit validation/evidence gates.
