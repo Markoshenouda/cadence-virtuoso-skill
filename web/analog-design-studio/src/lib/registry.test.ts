@@ -23,9 +23,11 @@ describe('Analog Design Studio repository model', () => {
     expect(t?.generator.path).toContain('Telescopic_OTA_NMOS_Diff_TotalW_V8');
     expect(t?.generator.invocation).toContain('CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813');
   });
-  it('maps the Folded Cascode candidate without upgrading its status', () => {
+  it('maps the Folded Cascode V1 as verified for schematic generation', () => {
     const t = getTopology('ota', 'folded-cascode-ota');
-    expect(t?.generator.status).toBe('candidate');
+    expect(t?.generator.status).toBe('verified');
+    expect(t?.generator.path).toContain('Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il');
+    expect(t?.generator.invocation).toContain('CreateFoldedCascodeOTA_NMOS_TotalW_V1_20260814');
   });
   it('rejects missing VDD', () => {
     const issues = validateDesign({ ...validConfig, vdd: null }, getTopology('ota', '5t-ota')?.generator);
