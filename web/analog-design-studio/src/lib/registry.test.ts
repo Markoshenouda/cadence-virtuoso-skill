@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { circuits, getTopology } from '@/lib/repository-registry';
+import fs from 'node:fs';
+import path from 'node:path';
+import { circuits, getTopology, type GeneratorEntry } from '@/lib/repository-registry';
+import { generatorContracts } from '@/lib/generator-contract';
 import { defaultSpecs, validateDesign, type DesignConfig } from '@/lib/validation';
 
 const validConfig: DesignConfig = {
@@ -49,5 +52,35 @@ describe('Analog Design Studio repository model', () => {
     const issues = validateDesign(validConfig, getTopology('ota', '5t-ota')?.generator);
     expect(issues.filter(i => i.level === 'error')).toHaveLength(0);
     expect(issues.some(i => i.level === 'warning')).toBe(true);
+  });
+});
+
+describe('registry and contract artifact integrity', () => {
+  const repoRoot = path.resolve(process.cwd(), '..', '..');
+  const referencedGenerators: Array<{ source: string; entry: GeneratorEntry }> = [];
+  for (const circuit of circuits) {
+    for (const topology of circuit.topologies) {
+      referencedGenerators.push({ source: `${circuit.id}/${topology.id}`, entry: topology.generator });
+      for (const alternative of topology.alternatives ?? []) referencedGenerators.push({ source: `${circuit.id}/${topology.id} alternative`, entry: alternative });
+    }
+  }
+  for (const [topologyId, contract] of Object.entries(generatorContracts)) {
+    referencedGenerators.push({ source: `contract ${topologyId}`, entry: contract.source });
+  }
+
+  it('references only generator and runbook files that exist in the repository', () => {
+    expect(referencedGenerators.length).toBeGreaterThanOrEqual(4);
+    for (const { source, entry } of referencedGenerators) {
+      expect(fs.existsSync(path.join(repoRoot, entry.path)), `${source}: generator file missing: ${entry.path}`).toBe(true);
+      if (entry.runbook) {
+        expect(fs.existsSync(path.join(repoRoot, entry.runbook)), `${source}: runbook file missing: ${entry.runbook}`).toBe(true);
+      }
+    }
+  });
+
+  it('gives every registered topology a documented invocation procedure', () => {
+    for (const { source, entry } of referencedGenerators) {
+      expect(entry.invocation, `${source}: missing invocation`).toMatch(/^Create[A-Za-z0-9_]+\(\)$/);
+    }
   });
 });

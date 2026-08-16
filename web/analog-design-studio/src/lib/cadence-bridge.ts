@@ -72,7 +72,7 @@ function requireSafe(value: string, re: RegExp, field: string) {
   if (!re.test(value) || value.includes('..')) throw new Error(`${field} contains unsupported path/command characters.`);
 }
 
-export function getCadenceBridgeConfig(env: NodeJS.ProcessEnv = process.env): CadenceBridgeConfig {
+export function getCadenceBridgeConfig(env: Partial<NodeJS.ProcessEnv> = process.env): CadenceBridgeConfig {
   const config: CadenceBridgeConfig = {
     enabled: envBool(env.CADENCE_BRIDGE_ENABLED),
     host: env.CADENCE_SSH_HOST ?? '192.168.75.219',
@@ -246,7 +246,9 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
   const startedAt = Date.now();
   try {
     await writeFile(localArtifact, artifact.content, 'utf8');
-    await writeFile(localWrapper, buildCadenceWrapper({ artifactRemotePath: remoteArtifact, invocation: contract.source.invocation, library: bridge.library, cell: targetCell, view: 'schematic', evidencePath: remoteEvidence }), 'utf8');
+    const invocation = contract.source.invocation;
+    if (!invocation) throw new Error(`Generator ${contract.source.id} does not declare an invocation procedure; Cadence execution refused.`);
+    await writeFile(localWrapper, buildCadenceWrapper({ artifactRemotePath: remoteArtifact, invocation, library: bridge.library, cell: targetCell, view: 'schematic', evidencePath: remoteEvidence }), 'utf8');
 
     const mkdir = await runProcess('ssh', sshArgs(bridge, `mkdir -p ${shellQuote(remoteDir)}`), 30_000);
     if (mkdir.exitCode !== 0) throw new Error(`Remote staging directory failed: ${mkdir.stderr || mkdir.stdout}`);
@@ -335,4 +337,3 @@ export async function verifyCadenceBinary(config: CadenceBridgeConfig) {
     return { ok: false, message: error?.stderr || error?.message || 'Cadence executable check failed.' };
   }
 }
-x

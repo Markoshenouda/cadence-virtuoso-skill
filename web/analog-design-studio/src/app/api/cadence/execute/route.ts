@@ -6,6 +6,9 @@ import { validateDesign } from '@/lib/validation';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ ok: false, status: 'failed', cadenceExecuted: false, message: 'Request body must be a JSON object with a config field.' }, { status: 400 });
+    }
     const config = body?.config;
     const dryRun = body?.dryRun === true;
     const topology = getTopology(config?.circuitId, config?.topologyId);
@@ -23,7 +26,8 @@ export async function POST(request: Request) {
     const result = await executeCadence(config, { dryRun, bridge });
     return NextResponse.json({ ok: result.status === 'succeeded' || result.status === 'dry-run' || result.status === 'disabled', ...result }, { status: result.status === 'succeeded' || result.status === 'dry-run' || result.status === 'disabled' ? 200 : 502 });
   } catch (error) {
-    return NextResponse.json({ ok: false, status: 'failed', cadenceExecuted: false, message: error instanceof Error ? error.message : String(error) }, { status: 400 });
+    const message = error instanceof SyntaxError ? 'Request body must be valid JSON.' : error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ ok: false, status: 'failed', cadenceExecuted: false, message }, { status: 400 });
   }
 }
 

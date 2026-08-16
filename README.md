@@ -13,9 +13,11 @@ Repository for Cadence Virtuoso IC6.1.7 / `tsmcN65` schematic-generation skills,
 | Latest 5T artifact | `canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; re-run required after migration |
 | PMOS-input `pch_mac/nch_mac` 5T skill | `skills/5t-ota-pmos-mac/SKILL.md` | Reusable PMOS-input methodology; sizing placeholder-only |
 | PMOS-input `pch_mac/nch_mac` generator | `canonical/5t-ota/5T_OTA_PMOS_INPUT_MAC_V1_20260814.il` | User-run in live Cadence; electrical performance unverified |
-| Canonical Telescopic artifact | `canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il` | Cadence schematic-generation verified; VDC bias and real differential output pins |
+| Canonical Telescopic artifact | `canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813.il` | Registry-current generator: `nch_mac`/`pch_mac`, gm/ID-optimized sizing, numeric-tolerant CDF read-back; live Check & Save run of V8 not yet recorded |
+| Telescopic V7 (recorded evidence) | `canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il` | Cadence schematic-generation verified 2026-08-12; superseded by V8 in the registry; retained as the evidence reference |
 | Folded Cascode skill | `skills/folded-cascode-ota/SKILL.md` | Current TotalW-first skill |
-| Folded Cascode executable | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il` | Legacy/reference until TotalW migration is Cadence-verified |
+| Folded Cascode executable | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il` | Current TotalW-first generator; schematic generation user-confirmed in live Cadence 2026-08-14; electrical performance unverified |
+| Folded Cascode legacy reference | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il` | Legacy W-first reference only; not TotalW-conformant |
 
 ## Repository map
 
@@ -60,7 +62,9 @@ Every MOS must explicitly assign `w`, `l`, `wf`, `fingers`, `simM`, `totalM`, `n
 - **TotalW CDF regression V5, 2026-08-12:** successfully executed in the user's live Cadence IC6.1.7 / tsmcN65 environment. The test verified multiple NF/M combinations and `totalM = fingers * simM` after save.
 - **5T PMOS/VDC test, 2026-08-12:** previous successful Cadence run remains recorded in the historical verification material.
 - **PMOS-input `pch_mac/nch_mac` 5T, 2026-08-14:** the user ran the generated schematic in live Cadence after SKILL-syntax and CDF read-back fixes. Topology generation, CDF assignment, PMOS orientation checks, stub/label connectivity, VOUT pin, and VDC generation were confirmed in that run. No electrical simulation or performance verification was performed.
-- **Telescopic V7, 2026-08-12:** CIW evidence records `SCH-1426` with no schematic-check errors and `SCH-1181` save. V7 is canonical for schematic generation only; operating point and performance remain unverified.
+- **Telescopic V7, 2026-08-12:** CIW evidence records `SCH-1426` with no schematic-check errors and `SCH-1181` save. That evidence applies to V7 only; operating point and performance remain unverified. V7 is superseded by V8 in the registry but retained as the recorded-evidence reference.
+- **Telescopic V8, 2026-08-14:** promoted to the registry-current telescopic generator (`nch_mac`/`pch_mac`, gm/ID-optimized sizing, numeric-tolerant 8-field CDF read-back, ASCII-safe). No live Cadence run of V8 has been recorded yet; do not call it Cadence-verified until one is.
+- **Folded Cascode TotalW V1, 2026-08-14:** schematic generation user-confirmed in the live IC6.1.7 / tsmcN65 environment (PDK-aware PMOS auto-placement; the only canonical generator calling `schCheck`). Electrical performance remains unverified.
 - **Historical artifacts:** old W-first generators remain preserved and are not presented as current TotalW generators.
 
 ## Run a generator
@@ -86,4 +90,4 @@ load("/home/cadence/5T_OTA_PMOS_INPUT_MAC_V1_20260814.il")
 Create5TOTA_PMOSIN_MAC_V1_20260814()
 ```
 
-For Telescopic V7 use [the V7 runbook](runbooks/RUN_telescopic_ota_v7_20260812.md). New designs follow: specification extraction → missing-spec questions → design confirmation → sizing → sizing confirmation → one-shot generator → Cadence execution → verification → canonical promotion.
+For Telescopic V8 use [the V8 runbook](runbooks/RUN_telescopic_ota_v8_20260813.md); the [V7 runbook](runbooks/RUN_telescopic_ota_v7_20260812.md) documents the 2026-08-12 verified run. New designs follow: specification extraction → missing-spec questions → design confirmation → sizing → sizing confirmation → one-shot generator → Cadence execution → verification → canonical promotion.

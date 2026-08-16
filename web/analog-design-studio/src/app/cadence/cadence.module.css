@@ -1,0 +1,39 @@
+.page { min-height: 100vh; background: #080b10; color: #dde6f1; padding: 30px 40px 60px; max-width: 1500px; margin: auto; }
+.header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid #1c2430; }
+.header a { color: #7abfff; font-size: 11px; text-decoration: none; border: 1px solid #273240; border-radius: 6px; padding: 6px 10px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand b { display: block; font-size: 13px; }
+.brand span { display: block; color: #6f7d90; font-size: 11px; margin-top: 2px; }
+.logo { width: 29px; height: 29px; border: 1px solid #35516c; background: #0e1a27; border-radius: 8px; display: grid; place-items: center; color: #8bd0ff; font-weight: 800; }
+.hero { margin-top: 26px; border: 1px solid #263548; border-radius: 14px; background: radial-gradient(circle at 85% 30%, #142333, #0b1118 50%); padding: 26px 29px; display: flex; justify-content: space-between; align-items: center; gap: 25px; }
+.eyebrow { font: 600 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; color: #5e6d80; }
+.hero h1 { font-size: 22px; letter-spacing: -.03em; margin: 9px 0 6px; }
+.hero p { font-size: 11px; line-height: 1.7; color: #738297; margin: 0; max-width: 560px; }
+.boundary { flex: none; display: flex; align-items: center; gap: 8px; border: 1px solid #274156; border-radius: 8px; background: #0e1a27; color: #8cc9f2; font: 600 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; padding: 9px 12px; }
+.grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; margin-top: 22px; align-items: start; }
+.card { border: 1px solid #1d2732; background: #0c1118; border-radius: 11px; padding: 16px; }
+.cardTitle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aab7c8; margin-bottom: 12px; }
+.card textarea { width: 100%; min-height: 320px; resize: vertical; background: #080c12; color: #c7d5e4; border: 1px solid #22303f; border-radius: 8px; padding: 12px; font: 500 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.card textarea:focus { outline: none; border-color: #35516c; }
+.controls { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.controls label { display: flex; align-items: center; gap: 7px; font-size: 10px; color: #8493a7; cursor: pointer; }
+.controls button { height: 34px; border: 1px solid #4c83b0; background: #17324a; color: #dff2ff; border-radius: 7px; padding: 0 14px; display: inline-flex; align-items: center; gap: 7px; font-size: 10px; cursor: pointer; }
+.controls button:disabled { opacity: .55; cursor: not-allowed; }
+.controls button svg { width: 13px; height: 13px; }
+.spin { animation: rotate 1s linear infinite; }
+@keyframes rotate { to { transform: rotate(360deg); } }
+.empty { border: 1px dashed #26313e; border-radius: 8px; padding: 26px 16px; text-align: center; color: #5d6c80; font-size: 10px; line-height: 1.7; }
+.error { margin: 0; border: 1px solid #5a2b2b; background: #1c0f10; color: #ff9d9d; border-radius: 8px; padding: 12px; font: 500 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+.result { display: grid; gap: 13px; }
+.status { display: flex; align-items: center; gap: 10px; border: 1px solid #26313e; border-radius: 8px; padding: 10px 12px; }
+.status b { font: 700 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: #8bd0ff; }
+.status span { font-size: 9px; color: #738196; }
+.rows { display: grid; gap: 6px; }
+.rows div { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid #19232e; padding-bottom: 6px; }
+.rows span { font-size: 9px; color: #69788c; }
+.rows code { font: 500 10px ui-monospace, SFMono-Regular, Menlo, monospace; color: #b6c6d8; word-break: break-all; text-align: right; }
+.evidence { display: grid; gap: 7px; }
+.evidence b { font-size: 10px; color: #aab7c8; }
+.evidence pre { margin: 0; border: 1px solid #22303f; background: #080c12; border-radius: 8px; padding: 10px; font: 500 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #9fb2c6; max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.output { margin: 0; border: 1px solid #22303f; background: #080c12; border-radius: 8px; padding: 10px; font: 500 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #9fb2c6; max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+@media (max-width: 900px) { .page { padding: 20px; } .hero { flex-direction: column; align-items: flex-start; } .grid { grid-template-columns: 1fr; } }

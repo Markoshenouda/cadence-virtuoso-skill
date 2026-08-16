@@ -5,9 +5,11 @@ Runbooks contain exact copy, load, and run commands. Versioned historical origin
 ## Current post-migration entry points
 
 - `RUN_5T_OTA_TOTALW_V2_20260812.md`
-- `RUN_telescopic_ota_v7_20260812.md` — canonical Telescopic flow, including SCP/load/run commands.
+- `RUN_telescopic_ota_v8_20260813.md` — registry-current Telescopic V8 flow (`nch_mac`/`pch_mac`).
+- `RUN_telescopic_ota_v7_20260812.md` — Cadence-verified 2026-08-12 Telescopic V7 flow; retained as the recorded-evidence runbook.
+- `RUN_Folded_Cascode_OTA_TotalW_V1_20260814.md` — current Folded Cascode TotalW flow.
 
-Both use the repository-wide design-level interface:
+All use the repository-wide design-level interface:
 
 ```text
 TotalW, L, NF, M
@@ -22,3 +24,7 @@ w, l, wf, fingers, simM, totalM, nf, m
 with `totalM = NF*M`.
 
 Use a new empty schematic for first execution. Read the runbook associated with the exact generator filename. Do not infer a procedure name from a filename.
+
+## Execution environments
+
+Manual runbooks transfer artifacts with `scp` to `cadence@192.168.75.217:/home/cadence/`. Historical runbooks reference `192.168.75.216` (retired host, evidence only). The Analog Design Studio web bridge (`web/analog-design-studio`) targets its own environment (`192.168.75.219` by default) and is configured through `CADENCE_*` environment variables, not through these runbooks.

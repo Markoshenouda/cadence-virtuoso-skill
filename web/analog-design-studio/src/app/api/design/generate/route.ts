@@ -6,24 +6,18 @@ import { generateParameterizedArtifact } from '@/lib/generator-adapter';
 export async function POST(request: Request) {
   try {
     const config = await request.json();
-import { validateDesign, type DesignConfig } from '@/lib/validation';
-import { generateRepositoryArtifact } from '@/lib/generator-adapter';
-
-export async function POST(request: Request) {
-  try {
-    const config = (await request.json()) as DesignConfig;
+    if (!config || typeof config !== 'object') {
+      return NextResponse.json({ ok: false, issues: [{ level: 'error', field: 'config', message: 'Request body must be a design configuration object.' }] }, { status: 400 });
+    }
     const topology = getTopology(config.circuitId, config.topologyId);
     if (!topology) {
       return NextResponse.json({ ok: false, issues: [{ level: 'error', field: 'topology', message: 'Topology is not registered in the repository registry.' }] }, { status: 400 });
     }
-
     const issues = validateDesign(config, topology.generator);
     if (issues.some((issue) => issue.level === 'error')) {
       return NextResponse.json({ ok: false, issues }, { status: 400 });
     }
     const artifact = await generateParameterizedArtifact(config);
-
-    const artifact = await generateRepositoryArtifact(config, topology.generator);
     return new NextResponse(artifact.content, {
       status: 200,
       headers: {
@@ -36,14 +30,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Parameterized generator failed.';
+    const message = error instanceof SyntaxError ? 'Request body must be valid JSON.' : error instanceof Error ? error.message : 'Parameterized generator failed.';
     return NextResponse.json({ ok: false, issues: [{ level: 'error', field: 'generator', message }] }, { status: 400 });
-        'X-Analog-Generator': topology.generator.path,
-        'X-Analog-Cadence-Executed': 'false',
-      },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Generator export failed.';
-    return NextResponse.json({ ok: false, issues: [{ level: 'error', field: 'generation', message }] }, { status: 500 });
   }
 }

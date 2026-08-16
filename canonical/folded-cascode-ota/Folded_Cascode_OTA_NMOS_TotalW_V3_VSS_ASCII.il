@@ -107,7 +107,7 @@ procedure(CreateFoldedCascodeOTA_NMOS_TotalW_V3_VSS()
         )
 
         ; Generate the tested base topology first.
-        CreateFoldedCascodeOTA_NMOS_TotalW_V1()
+        CreateFoldedCascodeOTA_NMOS_TotalW_V1_20260814()
 
         ; Add explicit VSS source required by the tested V3 artifact.
         existing = dbFindAnyInstByName(cv "VSS_SRC")
