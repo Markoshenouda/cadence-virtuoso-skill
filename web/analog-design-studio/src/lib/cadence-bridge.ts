@@ -195,6 +195,54 @@ export function parseCadenceEvidence(log: string, stdout = '', stderr = '') {
   };
 }
 
+export type CadenceRunClassification = { outcome: 'succeeded' | 'failed' | 'pending'; reason: string; notes: string[] };
+
+/**
+ * Phase-aware classification of a bridge run.
+ *
+ * The target VM's site .cdsinit prints *Error* lines for optional tool
+ * integrations (ASSURA/HSPICE) during every Virtuoso startup, BEFORE the
+ * wrapper prints ADS_BRIDGE_START. Fatal-looking text in that startup phase
+ * is environment noise and must not fail the run. Only an explicit
+ * ADS_BRIDGE: error marker, or fatal text inside the wrapper's execution
+ * window (ADS_BRIDGE_START up to ADS_BRIDGE_GENERATOR_DONE), is an execution
+ * failure. Success always requires the complete wrapper evidence chain;
+ * *Error* lines are never blanket-ignored.
+ */
+export function classifyCadenceRun(log: string, launchOutput: string, stderr: string, evidenceFile: string): CadenceRunClassification {
+  const combined = `${log}\n${launchOutput}\n${stderr}\n${evidenceFile}`;
+  const fatalPattern = /(?:\*Error\*|\bFATAL\b)/;
+  const notes: string[] = [];
+  const startIndex = combined.indexOf('ADS_BRIDGE_START');
+  const doneIndex = combined.indexOf('ADS_BRIDGE_GENERATOR_DONE');
+
+  if (startIndex < 0) {
+    if (fatalPattern.test(combined)) notes.push('Fatal-looking text appeared before ADS_BRIDGE_START (site initialization noise); it does not affect classification.');
+    return { outcome: 'pending', reason: 'The bridge wrapper has not reported ADS_BRIDGE_START yet.', notes };
+  }
+
+  if (fatalPattern.test(combined.slice(0, startIndex))) {
+    notes.push('Fatal-looking text appeared before ADS_BRIDGE_START (site initialization noise); it does not affect classification.');
+  }
+  const executionWindow = combined.slice(startIndex, doneIndex >= 0 ? doneIndex : undefined);
+  if (/ADS_BRIDGE:/.test(executionWindow)) {
+    return { outcome: 'failed', reason: 'The bridge wrapper reported an ADS_BRIDGE execution error.', notes };
+  }
+  if (fatalPattern.test(executionWindow)) {
+    return { outcome: 'failed', reason: '*Error* or FATAL text appeared during generator execution (between ADS_BRIDGE_START and completion).', notes };
+  }
+  if (doneIndex >= 0 && fatalPattern.test(combined.slice(doneIndex))) {
+    notes.push('Fatal-looking text appeared after ADS_BRIDGE_GENERATOR_DONE (post-run noise); it does not affect classification.');
+  }
+
+  const checkAndSaveDone = /ADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED|CHECK_AND_SAVE=dbSave_completed/.test(combined);
+  const wrapperSucceeded = /ADS_BRIDGE_STATUS=SUCCEEDED/.test(combined);
+  if (wrapperSucceeded && doneIndex >= 0 && checkAndSaveDone) {
+    return { outcome: 'succeeded', reason: 'Generator completed with Check and Save evidence.', notes };
+  }
+  return { outcome: 'pending', reason: 'Completion evidence is incomplete or has not appeared yet.', notes };
+}
+
 async function fetchRemoteText(config: CadenceBridgeConfig, remotePath: string) {
   const result = await runProcess('ssh', sshArgs(config, `cat ${shellQuote(remotePath)} 2>/dev/null || true`), 30_000);
   return { text: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
@@ -275,34 +323,33 @@ export async function executeCadence(config: DesignConfig, options: { dryRun?: b
       lastStderr = `${launch.stderr}\n${logFetch.stderr}\n${evidenceFetch.stderr}`.trim();
       const launchOutput = launchFetch.text;
       const evidence = parseCadenceEvidence(`${lastLog}\n${lastEvidence}`, `${launch.stdout}\n${launchOutput}`, lastStderr);
-      const combined = `${lastLog}\n${lastEvidence}\n${launchOutput}`;
+      const classification = classifyCadenceRun(lastLog, `${launch.stdout}\n${launchOutput}`, lastStderr, lastEvidence);
+      const capturedOutput = `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`;
 
-      if (evidence.generatorCompleted && evidence.checkAndSaveEvidence) {
+      if (classification.outcome === 'succeeded') {
         return {
           ...base,
-          status: evidence.errorDetected ? 'failed' : 'succeeded',
+          status: 'succeeded',
           cadenceExecuted: true,
           dryRun: false,
-          stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`,
+          stdout: capturedOutput,
           stderr: lastStderr,
           exitCode: null,
           evidence,
-          notes: evidence.errorDetected
-            ? ['Cadence reached completion markers but captured output also contains an error.']
-            : ['Virtuoso was launched from the TSMC PDK root using its existing cds.lib; generator completion and dbSave evidence were captured.'],
+          notes: ['Virtuoso was launched from the TSMC PDK root using its existing cds.lib; generator completion and dbSave evidence were captured.', ...classification.notes],
         };
       }
-      if (evidence.errorDetected && /ADS_BRIDGE:|\*Error\*|\bFATAL\b/.test(combined)) {
+      if (classification.outcome === 'failed') {
         return {
           ...base,
           status: 'failed',
           cadenceExecuted: true,
           dryRun: false,
-          stdout: `${launch.stdout}\n${launchOutput}\n${lastLog}\n${lastEvidence}`,
+          stdout: capturedOutput,
           stderr: lastStderr,
           exitCode: null,
           evidence,
-          notes: ['Cadence started from the PDK root, but the runtime reported an execution error before required completion evidence.'],
+          notes: [classification.reason, ...classification.notes],
         };
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));

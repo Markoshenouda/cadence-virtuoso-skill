@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCadenceWrapper, buildDetachedCadenceCommand, executeCadence, getCadenceBridgeConfig, parseCadenceEvidence, type CadenceBridgeConfig } from '@/lib/cadence-bridge';
+import { buildCadenceWrapper, buildDetachedCadenceCommand, classifyCadenceRun, executeCadence, getCadenceBridgeConfig, parseCadenceEvidence, type CadenceBridgeConfig } from '@/lib/cadence-bridge';
 import { defaultSpecsFor } from '@/lib/repository-registry';
 import type { DesignConfig } from '@/lib/validation';
 
@@ -133,5 +133,60 @@ describe('Phase 4 Cadence execution bridge', () => {
     expect(result.status).toBe('disabled');
     expect(result.cadenceExecuted).toBe(false);
     expect(result.exitCode).toBeNull();
+  });
+});
+describe('bridge run classification', () => {
+  const siteStartupNoise = [
+    '\o .cdsinit/.oceanrc: Environment variable XPEDION is not set!',
+    '\e *Error* load: can\'t access file - "/usr/local/cadence/ASSURA41/tools.lnx86/dfII/samples/local/uiConfig.il"',
+    '\e *Error* load: can\'t access file - "/usr/synopsys/I-2013.12-SP1/interface/HSPICE.ile"',
+  ].join('\n');
+  const successLog = [
+    '\o ADS_BRIDGE_START topology=simple-current-mirror_ADS_1',
+    '\o ADS_BRIDGE_LIBRARY_CONTEXT_OK',
+    '\o CMW: M1 TotalW=4u W/finger=4u L=480n NF=1 M=1 totalM=1',
+    '\o ADS_BRIDGE_CHECK_AND_SAVE_REQUIRED',
+    '\o ADS_BRIDGE_GENERATOR_DONE',
+    '\o ADS_BRIDGE_CHECK_AND_SAVE_CONFIRMED',
+  ].join('\n');
+  const successEvidence = 'ADS_BRIDGE_STATUS=SUCCEEDED\nLIBRARY=BGR_ADI\nGENERATOR_COMPLETED=true\nCHECK_AND_SAVE=dbSave_completed';
+
+  it('classifies a successful run with unrelated site .cdsinit startup errors as succeeded', () => {
+    const result = classifyCadenceRun(`${siteStartupNoise}\n${successLog}`, 'WARNING: HOST <berkeley> DOES NOT APPEAR TO BE A CADENCE SUPPORTED LINUX CONFIGURATION.', 'ssh transport warnings', successEvidence);
+    expect(result.outcome).toBe('succeeded');
+    expect(result.notes.some(note => note.includes('site initialization noise'))).toBe(true);
+  });
+
+  it('classifies a real ADS_BRIDGE execution error as failed even with completion text elsewhere', () => {
+    const log = `${siteStartupNoise}\n\o ADS_BRIDGE_START topology=x\n\e *Error* something in the window\n\e ADS_BRIDGE: repository generator returned nil.`;
+    const result = classifyCadenceRun(log, '', '', '');
+    expect(result.outcome).toBe('failed');
+    expect(result.reason).toMatch(/ADS_BRIDGE execution error/);
+  });
+
+  it('classifies fatal text during the execution window as failed', () => {
+    const log = `${siteStartupNoise}\n\o ADS_BRIDGE_START topology=x\n\e *Error* dbCreateInst: argument #1 invalid`;
+    const result = classifyCadenceRun(log, '', '', '');
+    expect(result.outcome).toBe('failed');
+    expect(result.reason).toMatch(/during generator execution/);
+  });
+
+  it('classifies missing or incomplete evidence as pending, not success', () => {
+    expect(classifyCadenceRun(`${siteStartupNoise}\n\o ADS_BRIDGE_START topology=x\n\o CMW: M1 TotalW=4u`, '', '', '').outcome).toBe('pending');
+    expect(classifyCadenceRun('ADS_BRIDGE_START x\nADS_BRIDGE_STATUS=SUCCEEDED', '', '', '').outcome).toBe('pending');
+    expect(classifyCadenceRun(`${successLog}`, '', '', '').outcome).toBe('pending');
+  });
+
+  it('classifies startup-only output before the wrapper starts as pending with a noise note', () => {
+    const result = classifyCadenceRun(siteStartupNoise, '', '', '');
+    expect(result.outcome).toBe('pending');
+    expect(result.notes.some(note => note.includes('site initialization noise'))).toBe(true);
+  });
+
+  it('classifies post-completion fatal noise as succeeded when the evidence chain is complete', () => {
+    const log = `${siteStartupNoise}\n${successLog}\n\e *Error* teardown dialog after completion`;
+    const result = classifyCadenceRun(log, '', '', successEvidence);
+    expect(result.outcome).toBe('succeeded');
+    expect(result.notes.some(note => note.includes('post-run noise'))).toBe(true);
   });
 });
