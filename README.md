@@ -18,6 +18,7 @@ Repository for Cadence Virtuoso IC6.1.7 / `tsmcN65` schematic-generation skills,
 | Folded Cascode skill | `skills/folded-cascode-ota/SKILL.md` | Current TotalW-first skill |
 | Folded Cascode executable | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il` | Current TotalW-first generator; schematic generation user-confirmed in live Cadence 2026-08-14; electrical performance unverified |
 | Folded Cascode legacy reference | `canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il` | Legacy W-first reference only; not TotalW-conformant |
+| Current Mirror executable | `canonical/current-mirror/Current_Mirror_NMOS_TotalW_V1_20260817.il` | Simple NMOS mirror (diode-connected M1 + output M2, `tsmcN65/nch`); schematic candidate; not Cadence-verified |
 
 ## Repository map
 
@@ -65,6 +66,7 @@ Every MOS must explicitly assign `w`, `l`, `wf`, `fingers`, `simM`, `totalM`, `n
 - **Telescopic V7, 2026-08-12:** CIW evidence records `SCH-1426` with no schematic-check errors and `SCH-1181` save. That evidence applies to V7 only; operating point and performance remain unverified. V7 is superseded by V8 in the registry but retained as the recorded-evidence reference.
 - **Telescopic V8, 2026-08-14:** promoted to the registry-current telescopic generator (`nch_mac`/`pch_mac`, gm/ID-optimized sizing, numeric-tolerant 8-field CDF read-back, ASCII-safe). No live Cadence run of V8 has been recorded yet; do not call it Cadence-verified until one is.
 - **Folded Cascode TotalW V1, 2026-08-14:** schematic generation user-confirmed in the live IC6.1.7 / tsmcN65 environment (PDK-aware PMOS auto-placement; the only canonical generator calling `schCheck`). Electrical performance remains unverified.
+- **Current Mirror TotalW V1, 2026-08-17:** first non-OTA topology, built through the registry-driven web architecture on the Folded V1 generator pattern (`tsmcN65/nch`). Bridge-run in the live IC6.1.7 / tsmcN65 environment the same day: full `CMW:` marker chain, `ADS_BRIDGE_GENERATOR_DONE`, `CHECK_AND_SAVE=dbSave_completed` (cell `simple-current-mirror_ADS_1786919831087`, library `BGR_ADI`). Schematic-generation mechanics verified; electrical performance unverified.
 - **Historical artifacts:** old W-first generators remain preserved and are not presented as current TotalW generators.
 
 ## Run a generator

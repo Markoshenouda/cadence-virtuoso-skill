@@ -22,6 +22,12 @@ const dTel = devices([
 const dFolded = devices([
   ['M1','NMOS','21u','500n',2,1], ['M2','NMOS','22u','500n',3,2], ['M3','PMOS','23u','900n',2,1], ['M4','PMOS','24u','900n',3,1], ['M5','PMOS','25u','1u',4,2], ['M6','PMOS','26u','1u',5,1], ['M7','NMOS','27u','1u',2,3], ['M8','NMOS','28u','1u',3,1], ['M9','NMOS','29u','1u',4,2], ['M10','NMOS','30u','1u',5,1], ['M11','NMOS','31u','1u',6,2],
 ]);
+const dMirror = devices([
+  ['M1','NMOS','5u','360n',2,1], ['M2','NMOS','10u','360n',4,1],
+]);
+const mirrorBase: DesignConfig = {
+  circuitId: 'current-mirror', topologyId: 'simple-current-mirror', technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT', specs: {}, sizingMethod: 'manual', devices: dMirror,
+};
 
 describe('Phase 3 generator contracts', () => {
   it('derives a contract for every registered topology, sourced from the registry', () => {
@@ -75,6 +81,21 @@ describe('Phase 3 generator contracts', () => {
     expect(generated).toContain('FCW_PlacePMOSAuto(cv pmos "M3" -5:12 "23u" "900n" "2" "1")');
     expect(generated).toContain('FCW_PlacePMOSAuto(cv pmos "M6" 5:8 "26u" "1u" "5" "1")');
     expect(generated).toContain('FCW_PlaceMOS(cv nmos "M11" 0:-8 "31u" "1u" "6" "2" "R0")');
+  });
+  it('parameterizes the Current Mirror with the CMW contract and preserves routing, VDC, and pin code', async () => {
+    const contract = getGeneratorContract('simple-current-mirror', 'tsmcN65');
+    const root = repositoryRoot();
+    const sourcePath = path.join(root, contract.source.path);
+    const before = await fs.readFile(sourcePath, 'utf8');
+    const generated = parameterizeCanonicalGenerator(before, mirrorBase, contract);
+    expect(generated).toContain('CMW_PlaceMOS(cv nmos "M1" -3:0 "5u" "360n" "2" "1" "R0")');
+    expect(generated).toContain('CMW_PlaceMOS(cv nmos "M2" 3:0 "10u" "360n" "4" "1" "R0")');
+    expect(generated).not.toContain('CMW_PlaceMOS(cv nmos "M1" -3:0 "4u" "480n" "1" "1" "R0")');
+    expect(generated).toContain('CMW_LabelMOSTerminal(cv M1 "G" "IREF")');
+    expect(generated).toContain('CMW_LabelMOSTerminal(cv M2 "D" "IOUT")');
+    expect(generated).toContain('CMW_CreateVDC(cv vdcMaster "V_IREF_SRC" -8:6 "0.75" "IREF" "VSS")');
+    expect(generated).toContain('CMW_CreatePin(cv pinMaster "IOUT" "output" 8:-4)');
+    expect(await fs.readFile(sourcePath, 'utf8')).toBe(before);
   });
   it('produces a generated artifact with explicit provenance and no Cadence execution claim', async () => {
     const artifact = await generateParameterizedArtifact(base('5t-ota', d5t));

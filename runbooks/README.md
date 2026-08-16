@@ -8,6 +8,7 @@ Runbooks contain exact copy, load, and run commands. Versioned historical origin
 - `RUN_telescopic_ota_v8_20260813.md` — registry-current Telescopic V8 flow (`nch_mac`/`pch_mac`).
 - `RUN_telescopic_ota_v7_20260812.md` — Cadence-verified 2026-08-12 Telescopic V7 flow; retained as the recorded-evidence runbook.
 - `RUN_Folded_Cascode_OTA_TotalW_V1_20260814.md` — current Folded Cascode TotalW flow.
+- `RUN_Current_Mirror_TotalW_V1_20260817.md` — simple NMOS current mirror flow (schematic candidate).
 
 All use the repository-wide design-level interface:
 

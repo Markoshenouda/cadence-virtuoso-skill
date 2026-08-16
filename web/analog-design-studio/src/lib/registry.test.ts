@@ -18,6 +18,14 @@ const validConfig: DesignConfig = {
 
 describe('Analog Design Studio repository model', () => {
   it('exposes OTA as a supported circuit', () => expect(circuits.find(c => c.id === 'ota')?.status).toBe('available'));
+  it('exposes the Current Mirror as an available circuit with its topology', () => {
+    const circuit = circuits.find(c => c.id === 'current-mirror');
+    expect(circuit?.status).toBe('available');
+    expect(circuit?.topologies.map(t => t.id)).toEqual(['simple-current-mirror']);
+    expect(circuit?.topologies[0].generator.status).toBe('candidate');
+    expect(circuit?.topologies[0].generator.path).toContain('Current_Mirror_NMOS_TotalW_V1_20260817.il');
+    expect(circuit?.topologies[0].generator.invocation).toBe('CreateCurrentMirror_NMOS_TotalW_V1_20260817()');
+  });
   it('resolves the 5T OTA to the current repository path', () => {
     const t = getTopology('ota', '5t-ota');
     expect(t?.generator.path).toBe('canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il');
@@ -116,5 +124,12 @@ describe('registry topology metadata consistency', () => {
     expect(Object.keys(defaults).sort()).toEqual(defined.map(s => s.key).sort());
     expect(defaults.gain).toEqual({ enabled: true, target: 60, unit: 'dB', operator: '>=' });
     expect(defaultSpecsFor('bandgap')).toEqual({});
+  });
+
+  it('derives current-mirror spec defaults from the registry', () => {
+    const defaults = defaultSpecsFor('current-mirror');
+    expect(Object.keys(defaults).sort()).toEqual(['compliance', 'iout', 'iref', 'matching', 'ratio', 'rout']);
+    expect(defaults.iref).toEqual({ enabled: true, target: 100, unit: 'µA', operator: '=' });
+    expect(defaults.matching).toEqual({ enabled: false, target: 2, unit: '%', operator: '<=' });
   });
 });

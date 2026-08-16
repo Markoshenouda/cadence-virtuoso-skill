@@ -150,6 +150,29 @@ const folded: Topology = {
   },
 };
 
+const simpleCurrentMirror: Topology = {
+  id: 'simple-current-mirror', name: 'Simple Current Mirror',
+  description: 'Diode-connected NMOS reference with NMOS output device; label-based 1:1 mirroring, ratio set by TotalW/NF/M.',
+  inputType: 'Current reference input', deviceCount: 2,
+  generator: {
+    id: 'current-mirror-totalw-v1', label: 'Current_Mirror_NMOS_TotalW_V1_20260817.il',
+    path: 'canonical/current-mirror/Current_Mirror_NMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_Current_Mirror_TotalW_V1_20260817.md',
+    invocation: 'CreateCurrentMirror_NMOS_TotalW_V1_20260817()',
+    notes: 'First TotalW-first current-mirror artifact following the Folded Cascode V1 generator pattern (tsmcN65/nch). Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1: diode-connected NMOS reference (gate tied to drain on IREF)', 'M2: NMOS output device (drain on IOUT)'],
+  nets: ['IREF', 'IOUT', 'VSS'],
+  diagram: 'simple-current-mirror',
+  contract: {
+    placementProcedure: 'CMW_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
 const otaSpecGroups: SpecGroup[] = [
   {
     name: 'Core performance',
@@ -176,9 +199,28 @@ const otaSpecGroups: SpecGroup[] = [
   },
 ];
 
+const currentMirrorSpecGroups: SpecGroup[] = [
+  {
+    name: 'Mirror performance',
+    specs: [
+      { key: 'iref', label: 'Reference Current', enabled: true, target: 100, unit: 'µA', operator: '=' },
+      { key: 'iout', label: 'Output Current', enabled: true, target: 100, unit: 'µA', operator: '=' },
+      { key: 'ratio', label: 'Mirror Ratio (M2:M1)', enabled: true, target: 1, unit: ':', operator: '=' },
+    ],
+  },
+  {
+    name: 'Output characteristics',
+    specs: [
+      { key: 'rout', label: 'Output Resistance', enabled: true, target: 10, unit: 'MΩ', operator: '>=' },
+      { key: 'compliance', label: 'Output Compliance Range', enabled: true, target: 0.5, unit: 'V', operator: '>=' },
+      { key: 'matching', label: 'Current Matching Error', enabled: false, target: 2, unit: '%', operator: '<=' },
+    ],
+  },
+];
+
 export const circuits: Circuit[] = [
   { id: 'ota', name: 'OTA', description: 'Operational Transconductance Amplifier', status: 'available', topologies: [fiveT, telescopic, folded], specGroups: otaSpecGroups },
-  { id: 'current-mirror', name: 'Current Mirror', description: 'Bias and current generation', status: 'coming-soon', topologies: [] },
+  { id: 'current-mirror', name: 'Current Mirror', description: 'Bias and current generation', status: 'available', topologies: [simpleCurrentMirror], specGroups: currentMirrorSpecGroups },
   { id: 'differential-pair', name: 'Differential Pair', description: 'Input differential stage', status: 'coming-soon', topologies: [] },
   { id: 'bandgap', name: 'Bandgap Reference', description: 'Precision voltage reference', status: 'coming-soon', topologies: [] },
   { id: 'ldo', name: 'LDO', description: 'Low-dropout regulator', status: 'coming-soon', topologies: [] },

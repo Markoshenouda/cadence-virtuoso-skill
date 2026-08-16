@@ -28,6 +28,7 @@ totalM = NF * M
 | Telescopic OTA (superseded) | `telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il` | Cadence-verified 2026-08-12 (`SCH-1426` no check errors, `SCH-1181` saved); schematic generation only; retained as the recorded-evidence reference |
 | Folded Cascode OTA | `folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il` | Current TotalW-first generator; schematic generation user-confirmed in the live IC6.1.7 / tsmcN65 environment on 2026-08-14; electrical performance unverified |
 | Folded Cascode OTA (legacy) | `folded-cascode-ota/Folded_Cascode_OTA_NMOS_FINAL_V9_REFERENCE_TOPOLOGY.il`, `folded-cascode-ota/Folded_Cascode_OTA_V8_REFERENCE.md` | Legacy W-first executable and routing/topology reference documentation; not TotalW-conformant; do not use for new designs |
+| Current Mirror | `current-mirror/Current_Mirror_NMOS_TotalW_V1_20260817.il` | Schematic candidate following the full TotalW contract (`tsmcN65/nch`, diode-connected reference + output device); not Cadence-verified |
 
 ## Verification policy
 
