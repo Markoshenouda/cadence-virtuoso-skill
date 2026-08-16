@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { Check, CircleAlert, Cpu, Play, RefreshCw, Terminal } from 'lucide-react';
-import { defaultSpecs, type DesignConfig } from '@/lib/validation';
+import { defaultSpecsFor } from '@/lib/repository-registry';
+import type { DesignConfig } from '@/lib/validation';
 import styles from './cadence.module.css';
 
 const defaultConfig: DesignConfig = {
-  circuitId: 'ota', topologyId: '5t-ota', technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT', specs: defaultSpecs, sizingMethod: 'manual',
+  circuitId: 'ota', topologyId: '5t-ota', technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT', specs: defaultSpecsFor('ota'), sizingMethod: 'manual',
   devices: [
     { device:'M1', type:'NMOS', totalW:'2u', L:'240n', NF:1, M:1 }, { device:'M2', type:'NMOS', totalW:'2u', L:'240n', NF:1, M:1 },
     { device:'M3', type:'PMOS', totalW:'4u', L:'480n', NF:1, M:1 }, { device:'M4', type:'PMOS', totalW:'4u', L:'480n', NF:1, M:1 }, { device:'M5', type:'NMOS', totalW:'6u', L:'480n', NF:1, M:1 },

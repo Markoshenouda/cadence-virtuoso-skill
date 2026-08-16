@@ -116,6 +116,7 @@ The current canonical generators expect an empty editable schematic context thro
 Copy `.env.example` to `.env.local` for local use. The supplied environment is represented as:
 
 ```text
+ADS_REPO_ROOT=<optional absolute path to the cadence-virtuoso-skill repository root>
 CADENCE_BRIDGE_ENABLED=false
 CADENCE_SSH_HOST=192.168.75.219
 CADENCE_SSH_USER=cadence
@@ -126,6 +127,8 @@ CADENCE_DISPLAY=:0
 CADENCE_LIBRARY=BGR_ADI
 CADENCE_TIMEOUT_MS=180000
 ```
+
+`ADS_REPO_ROOT` overrides where the app resolves canonical generators and runbooks. When unset, the app falls back to two directories above its working directory (the standard `web/analog-design-studio` checkout layout), so normal local development needs no configuration.
 
 Set `CADENCE_BRIDGE_ENABLED=true` only when the Next.js server is running on the trusted local machine that can SSH to the VM. `BatchMode=yes` is used, so password prompts are not accepted; use an SSH key/agent when required.
 
@@ -246,12 +249,14 @@ CI tests the bridge logic only; it never starts Cadence.
 
 ## Adding a new topology
 
-1. Add repository metadata to `src/lib/repository-registry.ts`.
-2. Point to an existing canonical generator.
-3. Add its exact placement procedure and device/polarity list to `src/lib/generator-contract.ts`.
-4. Keep artifact status conservative.
-5. Add contract/parameterization tests.
-6. Add bridge tests.
+The repository registry (`src/lib/repository-registry.ts`) is the single source of truth; contracts, the wizard, diagrams, and spec forms all derive from it.
+
+1. Add the topology to `src/lib/repository-registry.ts`: metadata, `generator` entry (path/runbook/invocation/status), `contract` (placement procedure, per-device list with polarity and `defaultSizing`), and a `diagram` key.
+2. Point the generator entry at an existing canonical generator; add its runbook. The registry/contract integrity tests fail if the files do not exist on disk.
+3. Generator contracts in `src/lib/generator-contract.ts` are derived automatically — no per-topology edits there.
+4. Keep artifact status conservative; never mark `verified` without recorded repository evidence.
+5. Add the diagram under the registered key in `src/components/topology-diagram.tsx` (unknown keys render an explicit placeholder).
+6. Add contract/parameterization tests; the registry consistency tests enforce device counts, sizing defaults, and contract/registry agreement.
 7. Do not modify canonical `.il` files merely to support the web application.
 
 ## Architecture

@@ -1,7 +1,54 @@
+/**
+ * Repository registry — the single source of truth for circuit, topology,
+ * generator, contract, sizing-default, diagram, and specification metadata.
+ *
+ * Everything the UI and the generator contracts consume is declared here and
+ * must not be duplicated in components or contract files. Canonical Cadence
+ * behavior stays in the repository's canonical/ generators; this file only
+ * describes and points at them.
+ */
+
 export type GeneratorStatus = 'verified' | 'candidate' | 'unverified';
 export type GeneratorEntry = { id: string; label: string; path: string; status: GeneratorStatus; runbook?: string; invocation?: string; notes?: string };
-export type Topology = { id: string; name: string; description: string; inputType: string; deviceCount?: number; generator: GeneratorEntry; alternatives?: GeneratorEntry[]; devices: string[]; nets: string[] };
-export type Circuit = { id: string; name: string; description: string; status: 'available' | 'coming-soon'; topologies: Topology[] };
+export type MosPolarity = 'NMOS' | 'PMOS';
+
+/** Per-device placement/sizing contract anchor inside one canonical generator. */
+export type ContractDevice = {
+  device: string;
+  type: MosPolarity;
+  /** Placement procedure override; defaults to the topology placementProcedure. */
+  placementProcedure?: string;
+  /** Engineering starting values for the wizard; never a verified sizing. */
+  defaultSizing: { totalW: string; L: string; NF: number; M: number };
+};
+
+export type TopologyContract = {
+  /** Default placement procedure for devices without an explicit override. */
+  placementProcedure: string;
+  devices: ContractDevice[];
+};
+
+export type Topology = {
+  id: string;
+  name: string;
+  description: string;
+  inputType: string;
+  deviceCount?: number;
+  generator: GeneratorEntry;
+  alternatives?: GeneratorEntry[];
+  devices: string[];
+  nets: string[];
+  /** Anchor/sizing contract consumed by the generator adapter. */
+  contract: TopologyContract;
+  /** Diagram key rendered by the topology diagram component. */
+  diagram: string;
+};
+
+export type SpecDefinition = { key: string; label: string; enabled: boolean; target: number | null; unit: string; operator: string };
+export type SpecGroup = { name: string; specs: SpecDefinition[] };
+export type SpecRecord = Record<string, { enabled: boolean; target: number | null; unit: string; operator: string }>;
+
+export type Circuit = { id: string; name: string; description: string; status: 'available' | 'coming-soon'; topologies: Topology[]; specGroups?: SpecGroup[] };
 
 export const technologies = [{
   id: 'tsmcN65', name: 'TSMC N65', status: 'Supported',
@@ -27,7 +74,18 @@ const fiveT: Topology = {
     notes: 'PMOS-input pch_mac/nch_mac flow. User-run topology/CDF checks are recorded; electrical performance is unverified.'
   }],
   devices: ['M1/M2: differential input pair', 'M3/M4: PMOS current-mirror load', 'M5: NMOS tail current source'],
-  nets: ['VINP', 'VINN', 'MIRROR', 'VOUT', 'TAIL', 'VDD', 'VSS', 'VBN_TAIL']
+  nets: ['VINP', 'VINN', 'MIRROR', 'VOUT', 'TAIL', 'VDD', 'VSS', 'VBN_TAIL'],
+  diagram: '5t-ota',
+  contract: {
+    placementProcedure: 'T5TW_Place',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '2u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '2u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M3', type: 'PMOS', placementProcedure: 'T5TW_PlaceVerifiedPMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M4', type: 'PMOS', placementProcedure: 'T5TW_PlaceVerifiedPMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M5', type: 'NMOS', defaultSizing: { totalW: '6u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
 };
 
 const telescopic: Topology = {
@@ -42,7 +100,22 @@ const telescopic: Topology = {
     notes: 'Promoted from the user-provided V8 reference. VDC PLUS/MINUS handling is canonicalized; electrical performance is not verified.'
   },
   devices: ['M1/M2: input pair', 'M3/M4: lower cascodes', 'M5/M6: folded/top devices', 'M7/M8: PMOS load pair', 'M9: tail/sink'],
-  nets: ['VINP', 'VINN', 'VOUTP', 'VOUTN', 'VDD', 'VSS', 'VBN_TAIL', 'VBN_CAS', 'VBP_CAS', 'VBP_LOAD']
+  nets: ['VINP', 'VINN', 'VOUTP', 'VOUTN', 'VDD', 'VSS', 'VBN_TAIL', 'VBN_CAS', 'VBP_CAS', 'VBP_LOAD'],
+  diagram: 'telescopic-ota',
+  contract: {
+    placementProcedure: 'TOTA8_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '10u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '10u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M3', type: 'NMOS', defaultSizing: { totalW: '6u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M4', type: 'NMOS', defaultSizing: { totalW: '6u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M5', type: 'PMOS', defaultSizing: { totalW: '8u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M6', type: 'PMOS', defaultSizing: { totalW: '8u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M7', type: 'PMOS', defaultSizing: { totalW: '10u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M8', type: 'PMOS', defaultSizing: { totalW: '10u', L: '1u', NF: 1, M: 1 } },
+      { device: 'M9', type: 'NMOS', defaultSizing: { totalW: '12u', L: '1u', NF: 1, M: 1 } },
+    ],
+  },
 };
 
 const folded: Topology = {
@@ -57,11 +130,54 @@ const folded: Topology = {
     notes: 'User-confirmed working in the target Cadence Virtuoso IC6.1.7 / tsmcN65 environment. Schematic generation is verified; electrical performance remains unverified.'
   },
   devices: ['M1/M2: input pair', 'M3/M4: PMOS top pair', 'M5/M6: PMOS folded pair', 'M7/M8: NMOS folded pair', 'M9/M10: NMOS sinks', 'M11: NMOS tail'],
-  nets: ['VINP', 'VINN', 'VOUT', 'NLEFT', 'NRIGHT', 'FOLD_L', 'VDD', 'VSS', 'VBP1', 'VBP2', 'VBN1', 'VBN2', 'VBN_TAIL']
+  nets: ['VINP', 'VINN', 'VOUT', 'NLEFT', 'NRIGHT', 'FOLD_L', 'VDD', 'VSS', 'VBP1', 'VBP2', 'VBN1', 'VBN2', 'VBN_TAIL'],
+  diagram: 'folded-cascode-ota',
+  contract: {
+    placementProcedure: 'FCW_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '8u', L: '480n', NF: 2, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '8u', L: '480n', NF: 2, M: 1 } },
+      { device: 'M3', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M4', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M5', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M6', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M7', type: 'NMOS', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M8', type: 'NMOS', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M9', type: 'NMOS', defaultSizing: { totalW: '6u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M10', type: 'NMOS', defaultSizing: { totalW: '6u', L: '1u', NF: 2, M: 1 } },
+      { device: 'M11', type: 'NMOS', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
+    ],
+  },
 };
 
+const otaSpecGroups: SpecGroup[] = [
+  {
+    name: 'Core performance',
+    specs: [
+      { key: 'gain', label: 'DC Gain', enabled: true, target: 60, unit: 'dB', operator: '>=' },
+      { key: 'gbw', label: 'GBW', enabled: true, target: 100, unit: 'MHz', operator: '>=' },
+      { key: 'phaseMargin', label: 'Phase Margin', enabled: true, target: 60, unit: 'deg', operator: '>=' },
+      { key: 'slewRate', label: 'Slew Rate', enabled: true, target: 100, unit: 'V/µs', operator: '>=' },
+      { key: 'load', label: 'Load Capacitance', enabled: true, target: 1, unit: 'pF', operator: '=' },
+      { key: 'power', label: 'Power', enabled: true, target: 2, unit: 'mW', operator: '<=' },
+    ],
+  },
+  {
+    name: 'Advanced',
+    specs: [
+      { key: 'noise', label: 'Input-Referred Noise', enabled: false, target: null, unit: 'nV/√Hz', operator: '<=' },
+      { key: 'psrr', label: 'PSRR', enabled: false, target: null, unit: 'dB', operator: '>=' },
+      { key: 'cmrr', label: 'CMRR', enabled: false, target: null, unit: 'dB', operator: '>=' },
+      { key: 'outputSwing', label: 'Output Swing', enabled: false, target: null, unit: 'V', operator: '=' },
+      { key: 'icmr', label: 'Input Common-Mode Range', enabled: false, target: null, unit: 'V', operator: '=' },
+      { key: 'settling', label: 'Settling Time', enabled: false, target: null, unit: 'ns', operator: '<=' },
+      { key: 'offset', label: 'Offset', enabled: false, target: null, unit: 'mV', operator: '<=' },
+    ],
+  },
+];
+
 export const circuits: Circuit[] = [
-  { id: 'ota', name: 'OTA', description: 'Operational Transconductance Amplifier', status: 'available', topologies: [fiveT, telescopic, folded] },
+  { id: 'ota', name: 'OTA', description: 'Operational Transconductance Amplifier', status: 'available', topologies: [fiveT, telescopic, folded], specGroups: otaSpecGroups },
   { id: 'current-mirror', name: 'Current Mirror', description: 'Bias and current generation', status: 'coming-soon', topologies: [] },
   { id: 'differential-pair', name: 'Differential Pair', description: 'Input differential stage', status: 'coming-soon', topologies: [] },
   { id: 'bandgap', name: 'Bandgap Reference', description: 'Precision voltage reference', status: 'coming-soon', topologies: [] },
@@ -71,3 +187,9 @@ export const circuits: Circuit[] = [
 
 export const getCircuit = (id: string) => circuits.find((c) => c.id === id);
 export const getTopology = (circuitId: string, topologyId: string) => getCircuit(circuitId)?.topologies.find((t) => t.id === topologyId);
+
+/** Initial spec record for a circuit, derived from the registry spec definitions. */
+export function defaultSpecsFor(circuitId: string): SpecRecord {
+  const groups = getCircuit(circuitId)?.specGroups ?? [];
+  return Object.fromEntries(groups.flatMap((group) => group.specs.map((spec) => [spec.key, { enabled: spec.enabled, target: spec.target, unit: spec.unit, operator: spec.operator }])));
+}

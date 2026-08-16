@@ -1,9 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { defaultSpecs, type DesignConfig } from '@/lib/validation';
+import { defaultSpecsFor } from '@/lib/repository-registry';
+import type { DesignConfig } from '@/lib/validation';
 import { deriveMosState, generatorContracts, getGeneratorContract, validateContractConfig } from '@/lib/generator-contract';
 import { generateParameterizedArtifact, parameterizeCanonicalGenerator } from '@/lib/generator-adapter';
+import { repositoryRoot } from '@/lib/repository-root';
+
+const defaultSpecs = defaultSpecsFor('ota');
 
 const base = (topologyId: DesignConfig['topologyId'], devices: DesignConfig['devices']): DesignConfig => ({
   circuitId: 'ota', topologyId, technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT', specs: defaultSpecs, sizingMethod: 'manual', devices,
@@ -20,11 +24,17 @@ const dFolded = devices([
 ]);
 
 describe('Phase 3 generator contracts', () => {
-  it('defines contracts for all current OTA topologies', () => {
-    expect(Object.keys(generatorContracts)).toEqual(['5t-ota', 'telescopic-ota', 'folded-cascode-ota']);
+  it('derives a contract for every registered topology, sourced from the registry', () => {
+    for (const [topologyId, contract] of Object.entries(generatorContracts)) {
+      expect(contract.source.path, topologyId).toBeTruthy();
+      expect(contract.devices.length, topologyId).toBeGreaterThan(0);
+      expect(contract.technologyId, topologyId).toBeTruthy();
+    }
+    expect(generatorContracts['folded-cascode-ota'].source.status).toBe('verified');
     expect(generatorContracts['folded-cascode-ota'].devices.slice(2, 6).every(d => d.type === 'PMOS')).toBe(true);
     expect(generatorContracts['folded-cascode-ota'].devices.slice(2, 6).every(d => d.placementProcedure === 'FCW_PlacePMOSAuto')).toBe(true);
-    for (const contract of Object.values(generatorContracts)) expect(contract.technologyId).toBe('tsmcN65');
+    expect(() => getGeneratorContract('not-a-topology', 'tsmcN65')).toThrow(/No parameterized generator contract/);
+    expect(() => getGeneratorContract('5t-ota', 'gpdk45')).toThrow(/not supported on technology/);
   });
   it('derives W/finger and totalM from the design-level contract', () => {
     expect(deriveMosState('10u', 4, 3)).toEqual({ totalW: '10u', nf: 4, m: 3, wPerFingerExpression: '(10u)/4', totalM: 12 });
@@ -35,7 +45,7 @@ describe('Phase 3 generator contracts', () => {
     expect(() => validateContractConfig(base('folded-cascode-ota', dFolded.map((d, i) => i === 2 ? { ...d, totalW: '8u" evil' } : d)), contract)).toThrow(/invalid TotalW scalar/);
   });
   it('parameterizes only exact placement anchors and leaves canonical source unchanged', async () => {
-    const root = path.resolve(process.cwd(), '..', '..');
+    const root = repositoryRoot();
     const contract = getGeneratorContract('5t-ota', 'tsmcN65');
     const sourcePath = path.join(root, contract.source.path);
     const before = await fs.readFile(sourcePath, 'utf8');
@@ -49,7 +59,7 @@ describe('Phase 3 generator contracts', () => {
   });
   it('parameterizes Telescopic V8 without changing placement, routing, or VDC code', async () => {
     const contract = getGeneratorContract('telescopic-ota', 'tsmcN65');
-    const root = path.resolve(process.cwd(), '..', '..');
+    const root = repositoryRoot();
     const source = await fs.readFile(path.join(root, contract.source.path), 'utf8');
     const generated = parameterizeCanonicalGenerator(source, base('telescopic-ota', dTel), contract);
     expect(generated).toContain('TOTA8_PlaceMOS(cv pmos "M7" -5:10 "17u" "1u" "5" "1" "R0")');
@@ -59,7 +69,7 @@ describe('Phase 3 generator contracts', () => {
   });
   it('parameterizes Folded Cascode with the PDK-aware PMOS/NMOS contract', async () => {
     const contract = getGeneratorContract('folded-cascode-ota', 'tsmcN65');
-    const root = path.resolve(process.cwd(), '..', '..');
+    const root = repositoryRoot();
     const source = await fs.readFile(path.join(root, contract.source.path), 'utf8');
     const generated = parameterizeCanonicalGenerator(source, base('folded-cascode-ota', dFolded), contract);
     expect(generated).toContain('FCW_PlacePMOSAuto(cv pmos "M3" -5:12 "23u" "900n" "2" "1")');

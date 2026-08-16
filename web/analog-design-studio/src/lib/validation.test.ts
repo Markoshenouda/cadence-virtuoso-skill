@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { defaultSpecs, validateDesign, type DesignConfig } from '@/lib/validation';
-import { getTopology } from '@/lib/repository-registry';
+import { validateDesign, type DesignConfig } from '@/lib/validation';
+import { defaultSpecsFor, getTopology } from '@/lib/repository-registry';
 
+const defaultSpecs = defaultSpecsFor('ota');
 const generator = getTopology('ota', '5t-ota')?.generator;
 
 const configWithSpecs = (specs: DesignConfig['specs']): DesignConfig => ({

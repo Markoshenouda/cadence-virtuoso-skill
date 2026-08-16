@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildCadenceWrapper, buildDetachedCadenceCommand, executeCadence, getCadenceBridgeConfig, parseCadenceEvidence, type CadenceBridgeConfig } from '@/lib/cadence-bridge';
-import { defaultSpecs, type DesignConfig } from '@/lib/validation';
+import { defaultSpecsFor } from '@/lib/repository-registry';
+import type { DesignConfig } from '@/lib/validation';
 
 const config: DesignConfig = {
   circuitId: 'ota',
@@ -9,7 +10,7 @@ const config: DesignConfig = {
   vdd: 1.2,
   temperature: 27,
   corner: 'TT',
-  specs: defaultSpecs,
+  specs: defaultSpecsFor('ota'),
   sizingMethod: 'manual',
   devices: [
     { device: 'M1', type: 'NMOS', totalW: '2u', L: '240n', NF: 1, M: 1 },

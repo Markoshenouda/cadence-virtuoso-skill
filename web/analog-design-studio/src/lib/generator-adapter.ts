@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { DesignConfig } from './validation';
 import { getGeneratorContract, validateContractConfig, deriveMosState, type GeneratorContract } from './generator-contract';
+import { repositoryRoot } from './repository-root';
 
 export type GeneratedArtifact = {
   filename: string;
@@ -14,10 +15,6 @@ export type GeneratedArtifact = {
   parameterized: true;
   contract: GeneratorContract;
 };
-
-function repositoryRoot() {
-  return path.resolve(process.cwd(), '..', '..');
-}
 
 function safeName(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');

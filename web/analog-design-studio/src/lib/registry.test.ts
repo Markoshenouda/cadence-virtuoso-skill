@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { circuits, getTopology, type GeneratorEntry } from '@/lib/repository-registry';
+import { circuits, defaultSpecsFor, getTopology, type GeneratorEntry } from '@/lib/repository-registry';
 import { generatorContracts } from '@/lib/generator-contract';
-import { defaultSpecs, validateDesign, type DesignConfig } from '@/lib/validation';
+import { repositoryRoot } from '@/lib/repository-root';
+import { validateDesign, type DesignConfig } from '@/lib/validation';
+
+const defaultSpecs = defaultSpecsFor('ota');
 
 const validConfig: DesignConfig = {
   circuitId: 'ota', topologyId: '5t-ota', technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT',
@@ -56,7 +59,7 @@ describe('Analog Design Studio repository model', () => {
 });
 
 describe('registry and contract artifact integrity', () => {
-  const repoRoot = path.resolve(process.cwd(), '..', '..');
+  const repoRoot = repositoryRoot();
   const referencedGenerators: Array<{ source: string; entry: GeneratorEntry }> = [];
   for (const circuit of circuits) {
     for (const topology of circuit.topologies) {
@@ -82,5 +85,36 @@ describe('registry and contract artifact integrity', () => {
     for (const { source, entry } of referencedGenerators) {
       expect(entry.invocation, `${source}: missing invocation`).toMatch(/^Create[A-Za-z0-9_]+\(\)$/);
     }
+  });
+});
+
+describe('registry topology metadata consistency', () => {
+  it('keeps device counts, contracts, sizing defaults, and diagrams internally consistent', () => {
+    for (const circuit of circuits) {
+      for (const topology of circuit.topologies) {
+        expect(topology.contract.devices.length, `${circuit.id}/${topology.id}: deviceCount mismatch`).toBe(topology.deviceCount);
+        expect(topology.diagram, `${circuit.id}/${topology.id}: diagram key missing`).toBeTruthy();
+        for (const device of topology.contract.devices) {
+          expect(['NMOS', 'PMOS'], `${circuit.id}/${topology.id}/${device.device}: polarity`).toContain(device.type);
+          expect(device.defaultSizing.totalW, `${device.device}: default TotalW`).toBeTruthy();
+          expect(device.defaultSizing.L, `${device.device}: default L`).toBeTruthy();
+          expect(device.defaultSizing.NF, `${device.device}: default NF`).toBeGreaterThanOrEqual(1);
+          expect(device.defaultSizing.M, `${device.device}: default M`).toBeGreaterThanOrEqual(1);
+        }
+        const contract = generatorContracts[topology.id];
+        expect(contract?.source.path, `${topology.id}: contract source must be the registry generator`).toBe(topology.generator.path);
+        expect(contract?.source.status, `${topology.id}: contract status drifted from registry`).toBe(topology.generator.status);
+      }
+    }
+  });
+
+  it('derives spec defaults from the circuit spec definitions', () => {
+    const ota = circuits.find(c => c.id === 'ota');
+    const defined = ota?.specGroups?.flatMap(g => g.specs) ?? [];
+    expect(defined.length).toBeGreaterThanOrEqual(13);
+    const defaults = defaultSpecsFor('ota');
+    expect(Object.keys(defaults).sort()).toEqual(defined.map(s => s.key).sort());
+    expect(defaults.gain).toEqual({ enabled: true, target: 60, unit: 'dB', operator: '>=' });
+    expect(defaultSpecsFor('bandgap')).toEqual({});
   });
 });
