@@ -173,6 +173,148 @@ const simpleCurrentMirror: Topology = {
   },
 };
 
+const differentialPair: Topology = {
+  id: 'differential-pair-nmos', name: 'Differential Pair',
+  description: 'NMOS differential input pair with NMOS tail source; drain outputs VOUTP/VOUTN.',
+  inputType: 'Differential input', deviceCount: 3,
+  generator: {
+    id: 'differential-pair-totalw-v1', label: 'Differential_Pair_NMOS_TotalW_V1_20260817.il',
+    path: 'canonical/differential-pair/Differential_Pair_NMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_Differential_Pair_TotalW_V1_20260817.md',
+    invocation: 'CreateDiffPair_NMOS_TotalW_V1_20260817()',
+    notes: 'TotalW-first differential pair stage (tsmcN65/nch) following the Current Mirror V1 generator pattern. Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1/M2: NMOS differential input pair', 'M3: NMOS tail current source'],
+  nets: ['VIP', 'VIN', 'VOUTP', 'VOUTN', 'TAIL', 'VBN_TAIL', 'VSS'],
+  diagram: 'differential-pair-nmos',
+  contract: {
+    placementProcedure: 'CDP_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '4u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M3', type: 'NMOS', defaultSizing: { totalW: '6u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
+const commonSource: Topology = {
+  id: 'common-source', name: 'Common-Source Amplifier',
+  description: 'NMOS input device with PMOS current-source load; single-ended VOUT.',
+  inputType: 'Voltage input', deviceCount: 2,
+  generator: {
+    id: 'common-source-totalw-v1', label: 'CommonSource_NMOS_TotalW_V1_20260817.il',
+    path: 'canonical/amplifier/CommonSource_NMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_CommonSource_Amp_TotalW_V1_20260817.md',
+    invocation: 'CreateCommonSource_NMOS_TotalW_V1_20260817()',
+    notes: 'TotalW-first common-source stage (nch + pch with geometry-verified PMOS orientation). Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1: NMOS input device', 'M2: PMOS current-source load'],
+  nets: ['VIN', 'VOUT', 'VBP', 'VDD', 'VSS'],
+  diagram: 'common-source',
+  contract: {
+    placementProcedure: 'CCS_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'PMOS', placementProcedure: 'CCS_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
+const sourceFollower: Topology = {
+  id: 'source-follower', name: 'Source Follower',
+  description: 'NMOS follower with NMOS current sink; buffered output at the source node.',
+  inputType: 'Voltage input', deviceCount: 2,
+  generator: {
+    id: 'source-follower-totalw-v1', label: 'SourceFollower_NMOS_TotalW_V1_20260817.il',
+    path: 'canonical/amplifier/SourceFollower_NMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_Source_Follower_TotalW_V1_20260817.md',
+    invocation: 'CreateSourceFollower_NMOS_TotalW_V1_20260817()',
+    notes: 'TotalW-first source follower (tsmcN65/nch). Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1: NMOS follower device', 'M2: NMOS current sink'],
+  nets: ['VIN', 'VOUT', 'VBN', 'VDD', 'VSS'],
+  diagram: 'source-follower',
+  contract: {
+    placementProcedure: 'CSF_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '6u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
+const cascodeAmp: Topology = {
+  id: 'cascode-amplifier', name: 'Cascode Amplifier',
+  description: 'NMOS input with NMOS cascode and PMOS current-source load; single-ended VOUT.',
+  inputType: 'Voltage input', deviceCount: 3,
+  generator: {
+    id: 'cascode-amp-totalw-v1', label: 'CascodeAmp_NMOS_TotalW_V1_20260817.il',
+    path: 'canonical/amplifier/CascodeAmp_NMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_Cascode_Amp_TotalW_V1_20260817.md',
+    invocation: 'CreateCascodeAmp_NMOS_TotalW_V1_20260817()',
+    notes: 'TotalW-first cascode stage (nch cascode + pch load with geometry-verified orientation). Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1: NMOS input device', 'M2: NMOS cascode device', 'M3: PMOS current-source load'],
+  nets: ['VIN', 'VOUT', 'NCAS', 'VBN_CAS', 'VBP', 'VDD', 'VSS'],
+  diagram: 'cascode-amplifier',
+  contract: {
+    placementProcedure: 'CCA_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '240n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M3', type: 'PMOS', placementProcedure: 'CCA_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
+const cascodeCurrentMirror: Topology = {
+  id: 'cascode-current-mirror', name: 'Cascode Current Mirror',
+  description: 'Diode-connected NMOS reference and output device with NMOS cascodes on both branches.',
+  inputType: 'Current reference input', deviceCount: 4,
+  generator: {
+    id: 'current-mirror-cascode-totalw-v1', label: 'Current_Mirror_Cascode_NMOS_TotalW_V1_20260817.il',
+    path: 'canonical/current-mirror/Current_Mirror_Cascode_NMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_Current_Mirror_Cascode_TotalW_V1_20260817.md',
+    invocation: 'CreateCurrentMirror_Cascode_NMOS_TotalW_V1_20260817()',
+    notes: 'TotalW-first cascode current mirror (tsmcN65/nch). Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1: diode-connected NMOS reference', 'M2: NMOS output device', 'M3/M4: NMOS cascodes'],
+  nets: ['IREF', 'IOUT', 'NB', 'NB2', 'VBC', 'VSS'],
+  diagram: 'cascode-current-mirror',
+  contract: {
+    placementProcedure: 'CCM_PlaceMOS',
+    devices: [
+      { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M3', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M4', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
+const pmosCurrentMirror: Topology = {
+  id: 'pmos-current-mirror', name: 'PMOS Current Mirror',
+  description: 'Diode-connected PMOS reference with PMOS output device; VDD-referenced mirroring.',
+  inputType: 'Current reference input', deviceCount: 2,
+  generator: {
+    id: 'current-mirror-pmos-totalw-v1', label: 'Current_Mirror_PMOS_TotalW_V1_20260817.il',
+    path: 'canonical/current-mirror/Current_Mirror_PMOS_TotalW_V1_20260817.il', status: 'candidate',
+    runbook: 'runbooks/RUN_Current_Mirror_PMOS_TotalW_V1_20260817.md',
+    invocation: 'CreateCurrentMirror_PMOS_TotalW_V1_20260817()',
+    notes: 'TotalW-first PMOS mirror (tsmcN65/pch) with geometry-verified PMOS orientation. Schematic candidate; not Cadence-verified; electrical performance unverified.'
+  },
+  devices: ['M1: diode-connected PMOS reference', 'M2: PMOS output device'],
+  nets: ['IREF', 'IOUT', 'VDD', 'VSS'],
+  diagram: 'pmos-current-mirror',
+  contract: {
+    placementProcedure: 'CPM_PlacePMOSAuto',
+    devices: [
+      { device: 'M1', type: 'PMOS', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
+      { device: 'M2', type: 'PMOS', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
+    ],
+  },
+};
+
 const otaSpecGroups: SpecGroup[] = [
   {
     name: 'Core performance',
@@ -218,10 +360,46 @@ const currentMirrorSpecGroups: SpecGroup[] = [
   },
 ];
 
+const differentialPairSpecGroups: SpecGroup[] = [
+  {
+    name: 'Pair performance',
+    specs: [
+      { key: 'gm', label: 'Transconductance', enabled: true, target: 2, unit: 'mS', operator: '>=' },
+      { key: 'tailCurrent', label: 'Tail Current', enabled: true, target: 100, unit: 'µA', operator: '=' },
+      { key: 'icmr', label: 'Input Common-Mode Range', enabled: true, target: 0.4, unit: 'V', operator: '>=' },
+    ],
+  },
+  {
+    name: 'Matching',
+    specs: [
+      { key: 'offset', label: 'Input Offset', enabled: false, target: 5, unit: 'mV', operator: '<=' },
+    ],
+  },
+];
+
+const amplifierSpecGroups: SpecGroup[] = [
+  {
+    name: 'Amplifier performance',
+    specs: [
+      { key: 'gain', label: 'DC Gain', enabled: true, target: 20, unit: 'dB', operator: '>=' },
+      { key: 'gbw', label: 'GBW', enabled: true, target: 100, unit: 'MHz', operator: '>=' },
+      { key: 'outputSwing', label: 'Output Swing', enabled: true, target: 1, unit: 'V', operator: '>=' },
+      { key: 'power', label: 'Power', enabled: true, target: 2, unit: 'mW', operator: '<=' },
+    ],
+  },
+  {
+    name: 'Advanced',
+    specs: [
+      { key: 'noise', label: 'Input-Referred Noise', enabled: false, target: 10, unit: 'nV/√Hz', operator: '<=' },
+    ],
+  },
+];
+
 export const circuits: Circuit[] = [
   { id: 'ota', name: 'OTA', description: 'Operational Transconductance Amplifier', status: 'available', topologies: [fiveT, telescopic, folded], specGroups: otaSpecGroups },
-  { id: 'current-mirror', name: 'Current Mirror', description: 'Bias and current generation', status: 'available', topologies: [simpleCurrentMirror], specGroups: currentMirrorSpecGroups },
-  { id: 'differential-pair', name: 'Differential Pair', description: 'Input differential stage', status: 'coming-soon', topologies: [] },
+  { id: 'current-mirror', name: 'Current Mirror', description: 'Bias and current generation', status: 'available', topologies: [simpleCurrentMirror, cascodeCurrentMirror, pmosCurrentMirror], specGroups: currentMirrorSpecGroups },
+  { id: 'differential-pair', name: 'Differential Pair', description: 'Input differential stage', status: 'available', topologies: [differentialPair], specGroups: differentialPairSpecGroups },
+  { id: 'amplifier', name: 'Amplifier', description: 'Single-stage voltage amplifiers', status: 'available', topologies: [commonSource, sourceFollower, cascodeAmp], specGroups: amplifierSpecGroups },
   { id: 'bandgap', name: 'Bandgap Reference', description: 'Precision voltage reference', status: 'coming-soon', topologies: [] },
   { id: 'ldo', name: 'LDO', description: 'Low-dropout regulator', status: 'coming-soon', topologies: [] },
   { id: 'comparator', name: 'Comparator', description: 'Decision circuit', status: 'coming-soon', topologies: [] }

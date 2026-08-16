@@ -29,6 +29,40 @@ const mirrorBase: DesignConfig = {
   circuitId: 'current-mirror', topologyId: 'simple-current-mirror', technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT', specs: {}, sizingMethod: 'manual', devices: dMirror,
 };
 
+type BatchSpec = {
+  topologyId: string;
+  circuitId: string;
+  devices: Array<[string, 'NMOS' | 'PMOS', string, string, number, number]>;
+  expect: string[];
+  absent?: string[];
+};
+const batchTopologies: BatchSpec[] = [
+  { topologyId: 'differential-pair-nmos', circuitId: 'differential-pair',
+    devices: [['M1','NMOS','5u','360n',2,1],['M2','NMOS','6u','360n',3,1],['M3','NMOS','8u','700n',2,1]],
+    expect: ['CDP_PlaceMOS(cv nmos "M1" -3:0 "5u" "360n" "2" "1" "R0")', 'CDP_PlaceMOS(cv nmos "M3" 0:-6 "8u" "700n" "2" "1" "R0")', 'CDP_LabelMOSTerminal(cv M1 "G" "VIP")'],
+    absent: ['CDP_PlaceMOS(cv nmos "M1" -3:0 "4u" "240n" "1" "1" "R0")'] },
+  { topologyId: 'common-source', circuitId: 'amplifier',
+    devices: [['M1','NMOS','5u','360n',2,1],['M2','PMOS','12u','600n',4,2]],
+    expect: ['CCS_PlaceMOS(cv nmos "M1" 0:0 "5u" "360n" "2" "1" "R0")', 'CCS_PlacePMOSAuto(cv pmos "M2" 0:6 "12u" "600n" "4" "2")', 'CCS_LabelMOSTerminal(cv M2 "S" "VDD")'],
+    absent: ['CCS_PlaceMOS(cv nmos "M1" 0:0 "4u" "240n" "1" "1" "R0")'] },
+  { topologyId: 'source-follower', circuitId: 'amplifier',
+    devices: [['M1','NMOS','5u','360n',2,1],['M2','NMOS','9u','700n',3,1]],
+    expect: ['CSF_PlaceMOS(cv nmos "M1" 0:3 "5u" "360n" "2" "1" "R0")', 'CSF_PlaceMOS(cv nmos "M2" 0:-3 "9u" "700n" "3" "1" "R0")'],
+    absent: ['CSF_PlaceMOS(cv nmos "M1" 0:3 "4u" "240n" "1" "1" "R0")'] },
+  { topologyId: 'cascode-amplifier', circuitId: 'amplifier',
+    devices: [['M1','NMOS','5u','360n',2,1],['M2','NMOS','6u','500n',2,1],['M3','PMOS','12u','600n',4,2]],
+    expect: ['CCA_PlaceMOS(cv nmos "M2" 0:3 "6u" "500n" "2" "1" "R0")', 'CCA_PlacePMOSAuto(cv pmos "M3" 0:9 "12u" "600n" "4" "2")'],
+    absent: ['CCA_PlaceMOS(cv nmos "M1" 0:-3 "4u" "240n" "1" "1" "R0")'] },
+  { topologyId: 'cascode-current-mirror', circuitId: 'current-mirror',
+    devices: [['M1','NMOS','5u','360n',2,1],['M2','NMOS','6u','360n',3,1],['M3','NMOS','7u','500n',2,1],['M4','NMOS','8u','500n',4,1]],
+    expect: ['CCM_PlaceMOS(cv nmos "M1" 0:-3 "5u" "360n" "2" "1" "R0")', 'CCM_PlaceMOS(cv nmos "M4" 6:3 "8u" "500n" "4" "1" "R0")', 'CCM_LabelMOSTerminal(cv M1 "D" "NB")'],
+    absent: ['CCM_PlaceMOS(cv nmos "M1" 0:-3 "4u" "480n" "1" "1" "R0")'] },
+  { topologyId: 'pmos-current-mirror', circuitId: 'current-mirror',
+    devices: [['M1','PMOS','9u','500n',2,1],['M2','PMOS','14u','500n',4,1]],
+    expect: ['CPM_PlacePMOSAuto(cv pmos "M1" -3:0 "9u" "500n" "2" "1")', 'CPM_PlacePMOSAuto(cv pmos "M2" 3:0 "14u" "500n" "4" "1")', 'CPM_LabelMOSTerminal(cv M2 "D" "IOUT")'],
+    absent: ['CPM_PlacePMOSAuto(cv pmos "M1" -3:0 "8u" "480n" "1" "1")'] },
+];
+
 describe('Phase 3 generator contracts', () => {
   it('derives a contract for every registered topology, sourced from the registry', () => {
     for (const [topologyId, contract] of Object.entries(generatorContracts)) {
@@ -96,6 +130,22 @@ describe('Phase 3 generator contracts', () => {
     expect(generated).toContain('CMW_CreateVDC(cv vdcMaster "V_IREF_SRC" -8:6 "0.75" "IREF" "VSS")');
     expect(generated).toContain('CMW_CreatePin(cv pinMaster "IOUT" "output" 8:-4)');
     expect(await fs.readFile(sourcePath, 'utf8')).toBe(before);
+  });
+  it('parameterizes each new batch topology against its real canonical generator and leaves it unchanged on disk', async () => {
+    const root = repositoryRoot();
+    for (const spec of batchTopologies) {
+      const contract = getGeneratorContract(spec.topologyId, 'tsmcN65');
+      const sourcePath = path.join(root, contract.source.path);
+      const before = await fs.readFile(sourcePath, 'utf8');
+      const config: DesignConfig = {
+        circuitId: spec.circuitId, topologyId: spec.topologyId, technologyId: 'tsmcN65', vdd: 1.2, temperature: 27, corner: 'TT', specs: {}, sizingMethod: 'manual',
+        devices: devices(spec.devices),
+      };
+      const generated = parameterizeCanonicalGenerator(before, config, contract);
+      for (const expected of spec.expect) expect(generated, `${spec.topologyId}: missing ${expected}`).toContain(expected);
+      for (const missing of spec.absent ?? []) expect(generated, `${spec.topologyId}: stale anchor ${missing}`).not.toContain(missing);
+      expect(await fs.readFile(sourcePath, 'utf8'), `${spec.topologyId}: canonical changed`).toBe(before);
+    }
   });
   it('produces a generated artifact with explicit provenance and no Cadence execution claim', async () => {
     const artifact = await generateParameterizedArtifact(base('5t-ota', d5t));

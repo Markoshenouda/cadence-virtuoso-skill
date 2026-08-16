@@ -9,6 +9,12 @@ Runbooks contain exact copy, load, and run commands. Versioned historical origin
 - `RUN_telescopic_ota_v7_20260812.md` — Cadence-verified 2026-08-12 Telescopic V7 flow; retained as the recorded-evidence runbook.
 - `RUN_Folded_Cascode_OTA_TotalW_V1_20260814.md` — current Folded Cascode TotalW flow.
 - `RUN_Current_Mirror_TotalW_V1_20260817.md` — simple NMOS current mirror flow (schematic candidate).
+- `RUN_Current_Mirror_Cascode_TotalW_V1_20260817.md` — cascode NMOS current mirror.
+- `RUN_Current_Mirror_PMOS_TotalW_V1_20260817.md` — PMOS current mirror.
+- `RUN_Differential_Pair_TotalW_V1_20260817.md` — NMOS differential pair stage.
+- `RUN_CommonSource_Amp_TotalW_V1_20260817.md` — common-source amplifier.
+- `RUN_Source_Follower_TotalW_V1_20260817.md` — source follower.
+- `RUN_Cascode_Amp_TotalW_V1_20260817.md` — cascode amplifier.
 
 All use the repository-wide design-level interface:
 
