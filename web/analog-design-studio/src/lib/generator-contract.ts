@@ -1,11 +1,14 @@
-import type { DesignConfig } from './validation';
-import type { GeneratorEntry } from './repository-registry';
+/**
+ * Generator contracts — validation logic plus derivation from the repository
+ * registry. All topology metadata (generator entry, devices, placement
+ * procedures) is owned by repository-registry.ts; this module derives
+ * contracts from it so the two can never drift.
+ */
 
-export type GeneratorDeviceContract = {
-  device: string;
-  type: 'NMOS' | 'PMOS';
-  placementProcedure?: string;
-};
+import type { DesignConfig } from './validation';
+import { circuits, technologies, type ContractDevice, type GeneratorEntry, type Topology } from './repository-registry';
+
+export type GeneratorDeviceContract = ContractDevice;
 
 export type GeneratorContract = {
   topologyId: string;
@@ -17,95 +20,31 @@ export type GeneratorContract = {
   derivations: { wPerFinger: 'TotalW / NF'; totalM: 'NF * M' };
 };
 
-const contract = (
-  topologyId: string,
-  source: GeneratorEntry,
-  placementProcedure: string,
-  devices: GeneratorDeviceContract[],
-): GeneratorContract => ({
-  topologyId,
-  technologyId: 'tsmcN65',
-  source,
-  placementProcedure,
-  devices,
-  parameterFields: ['TotalW', 'L', 'NF', 'M'],
-  derivations: { wPerFinger: 'TotalW / NF', totalM: 'NF * M' },
-});
+const SUPPORTED_TECHNOLOGY_IDS = technologies.map((technology) => technology.id);
+const DEFAULT_TECHNOLOGY_ID = SUPPORTED_TECHNOLOGY_IDS[0] ?? '';
 
-export const generatorContracts: Record<string, GeneratorContract> = {
-  '5t-ota': contract(
-    '5t-ota',
-    {
-      id: '5t-totalw-v2',
-      label: '5T_OTA_PMOS_TOTALW_V2_20260812.il',
-      path: 'canonical/5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il',
-      status: 'candidate',
-      runbook: 'runbooks/RUN_5T_OTA_TOTALW_V2_20260812.md',
-      invocation: 'Create5TOTA_PMOS_TOTALW_V2_20260812()',
-    },
-    'T5TW_Place',
-    [
-      { device: 'M1', type: 'NMOS' },
-      { device: 'M2', type: 'NMOS' },
-      { device: 'M3', type: 'PMOS', placementProcedure: 'T5TW_PlaceVerifiedPMOS' },
-      { device: 'M4', type: 'PMOS', placementProcedure: 'T5TW_PlaceVerifiedPMOS' },
-      { device: 'M5', type: 'NMOS' },
-    ],
-  ),
-  'telescopic-ota': contract(
-    'telescopic-ota',
-    {
-      id: 'telescopic-v8',
-      label: 'Telescopic_OTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813.il',
-      path: 'canonical/telescopic-ota/Telescopic_OTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813.il',
-      status: 'candidate',
-      runbook: 'runbooks/RUN_telescopic_ota_v8_20260813.md',
-      invocation: 'CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260813()',
-    },
-    'TOTA8_PlaceMOS',
-    [
-      { device: 'M1', type: 'NMOS' },
-      { device: 'M2', type: 'NMOS' },
-      { device: 'M3', type: 'NMOS' },
-      { device: 'M4', type: 'NMOS' },
-      { device: 'M5', type: 'PMOS' },
-      { device: 'M6', type: 'PMOS' },
-      { device: 'M7', type: 'PMOS' },
-      { device: 'M8', type: 'PMOS' },
-      { device: 'M9', type: 'NMOS' },
-    ],
-  ),
-  'folded-cascode-ota': contract(
-    'folded-cascode-ota',
-    {
-      id: 'folded-totalw-v1',
-      label: 'Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il',
-      path: 'canonical/folded-cascode-ota/Folded_Cascode_OTA_NMOS_TotalW_V1_20260814.il',
-      status: 'candidate',
-      runbook: 'runbooks/RUN_Folded_Cascode_OTA_TotalW_V1_20260814.md',
-      invocation: 'CreateFoldedCascodeOTA_NMOS_TotalW_V1_20260814()',
-    },
-    'FCW_PlaceMOS',
-    [
-      { device: 'M1', type: 'NMOS' },
-      { device: 'M2', type: 'NMOS' },
-      { device: 'M3', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto' },
-      { device: 'M4', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto' },
-      { device: 'M5', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto' },
-      { device: 'M6', type: 'PMOS', placementProcedure: 'FCW_PlacePMOSAuto' },
-      { device: 'M7', type: 'NMOS' },
-      { device: 'M8', type: 'NMOS' },
-      { device: 'M9', type: 'NMOS' },
-      { device: 'M10', type: 'NMOS' },
-      { device: 'M11', type: 'NMOS' },
-    ],
-  ),
-};
+function buildContract(topology: Topology): GeneratorContract {
+  return {
+    topologyId: topology.id,
+    technologyId: DEFAULT_TECHNOLOGY_ID,
+    source: topology.generator,
+    placementProcedure: topology.contract.placementProcedure,
+    devices: topology.contract.devices,
+    parameterFields: ['TotalW', 'L', 'NF', 'M'],
+    derivations: { wPerFinger: 'TotalW / NF', totalM: 'NF * M' },
+  };
+}
+
+export const generatorContracts: Record<string, GeneratorContract> = Object.fromEntries(
+  circuits.flatMap((circuit) => circuit.topologies.map((topology) => [topology.id, buildContract(topology)])),
+);
 
 export function getGeneratorContract(topologyId: string, technologyId: string): GeneratorContract {
   const result = generatorContracts[topologyId];
   if (!result) throw new Error(`No parameterized generator contract for topology: ${topologyId}`);
-  if (result.technologyId !== technologyId) throw new Error(`Topology ${topologyId} is not supported on technology ${technologyId}`);
+  if (result.technologyId !== technologyId || !SUPPORTED_TECHNOLOGY_IDS.includes(technologyId)) {
+    throw new Error(`Topology ${topologyId} is not supported on technology ${technologyId}`);
+  }
   return result;
 }
 

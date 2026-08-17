@@ -12,7 +12,7 @@ const config: TestConfig = {
   vdd: 1.2,
   temperature: 27,
   corner: 'TT',
-  specs: [],
+  specs: {},
   sizingMethod: 'gmID',
   devices: [
     { device: 'M1', type: 'NMOS', totalW: '3u', L: '240n', NF: 2, M: 1 },

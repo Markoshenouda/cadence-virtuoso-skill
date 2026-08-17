@@ -1,0 +1,323 @@
+;=============================================================================
+; Current-Mirror OTA - TotalW V1 - 2026-08-17
+; Cadence Virtuoso IC6.1.7 / SKILL - PDK target: tsmcN65 - 2026-08-17
+;
+; TotalW-first generator: W/finger = TotalW/NF, totalM = NF*M.
+; Routing contract: one isolated labeled stub per terminal; no
+; device-to-device wires. Schematic candidate; electrical performance
+; is NOT verified. All source text is ASCII-only.
+;
+;   M1  NMOS input pair (G=VIP D=NA S=TAIL B=VSS)
+;   M2  NMOS input pair (G=VIN D=NB S=TAIL B=VSS)
+;   M3  PMOS diode mirror (G=NA D=NA S=VDD B=VDD)
+;   M4  PMOS mirror device (G=NA D=NB S=VDD B=VDD)
+;   M5  NMOS diode mirror (G=NB D=NB S=VSS B=VSS)
+;   M6  NMOS mirror output (G=NB D=VOUT S=VSS B=VSS)
+;   M7  NMOS tail source (G=VBN_TAIL D=TAIL S=VSS B=VSS)
+;   M8  PMOS output load (G=VBP D=VOUT S=VDD B=VDD)
+;=============================================================================
+
+(setq CMO_LIB "tsmcN65")
+(setq CMO_NMOS "nch")
+(setq CMO_PMOS "pch")
+(setq CMO_STUB 0.75)
+(setq CMO_WIRE 0.0625)
+procedure(CMO_ToFloat(val)
+    cond(
+        (numberp(val) float(val))
+        (stringp(val)
+            let((parsed)
+                parsed=nil
+                errset(parsed=cdfParseFloatString(val) t)
+                parsed
+            )
+        )
+        (t nil)
+    )
+)
+
+procedure(CMO_ValueMatches(got expect)
+    let((gn en)
+        gn=CMO_ToFloat(got)
+        en=CMO_ToFloat(expect)
+        if(gn && en
+            then abs(gn-en) < 1e-12 * max(1.0 abs(en))
+            else equal(got expect)
+        )
+    )
+)
+
+procedure(CMO_OpenMaster(lib cell)
+    let((master)
+        master=dbOpenCellViewByType(lib cell "symbol" "" "r")
+        unless(master
+            error("CMO: cannot open %s/%s/symbol.\n" lib cell)
+        )
+        master
+    )
+)
+
+procedure(CMO_SetMOS(inst TotalW L NF M)
+    let((cdf nfInt mInt WperFinger totalM)
+        cdf=cdfGetInstCDF(inst)
+        unless(cdf error("CMO: CDF missing on %s.\n" inst~>name))
+        unless(cdf->w && cdf->l && cdf->wf && cdf->fingers && cdf->simM && cdf->totalM && cdf->nf && cdf->m
+            error("CMO: incomplete MOS CDF on %s.\n" inst~>name))
+        nfInt=atoi(NF)
+        mInt=atoi(M)
+        unless(nfInt>0 error("CMO: NF must be >= 1 on %s.\n" inst~>name))
+        unless(mInt>0 error("CMO: M must be >= 1 on %s.\n" inst~>name))
+        WperFinger=CMO_ToFloat(TotalW)/float(nfInt)
+        totalM=sprintf(nil "%d" (nfInt*mInt))
+        cdf->w->value=sprintf(nil "%g" WperFinger)
+        cdf->l->value=L
+        cdf->wf->value=TotalW
+        cdf->fingers->value=NF
+        cdf->simM->value=M
+        cdf->totalM->value=totalM
+        cdf->nf->value=NF
+        cdf->m->value=M
+        unless(CMO_ValueMatches(cdf->w->value WperFinger)
+            error("CMO: W/finger read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->l->value L)
+            error("CMO: L read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->wf->value TotalW)
+            error("CMO: TotalW read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->fingers->value NF)
+            error("CMO: fingers read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->simM->value M)
+            error("CMO: simM read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->totalM->value totalM)
+            error("CMO: totalM read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->nf->value NF)
+            error("CMO: nf read-back mismatch on %s.\n" inst~>name))
+        unless(CMO_ValueMatches(cdf->m->value M)
+            error("CMO: m read-back mismatch on %s.\n" inst~>name))
+        printf("CMO: %s TotalW=%s W/finger=%s L=%s NF=%s M=%s totalM=%s\n"
+            inst~>name TotalW cdf->w->value L NF M totalM)
+        t
+    )
+)
+
+procedure(CMO_PinCenter(inst pinName)
+    let((term pin fig)
+        term=dbFindTermByName(inst~>master pinName)
+        unless(term error("CMO: terminal %s missing on %s.\n" pinName inst~>name))
+        pin=car(term~>pins)
+        unless(pin error("CMO: pin figure missing on %s.%s.\n" inst~>name pinName))
+        fig=pin~>fig
+        unless(fig error("CMO: figure missing on %s.%s.\n" inst~>name pinName))
+        dbTransformPoint(centerBox(fig~>bBox) inst~>transform)
+    )
+)
+
+procedure(CMO_PlaceMOS(cv master name xy TotalW L NF M orient)
+    let((inst)
+        inst=dbCreateInst(cv master name xy orient)
+        unless(inst error("CMO: cannot create %s.\n" name))
+        CMO_SetMOS(inst TotalW L NF M)
+        inst
+    )
+)
+
+procedure(CMO_StubEnd(inst pinName)
+    let((g b s d p ref dx dy)
+        g=CMO_PinCenter(inst "G")
+        b=CMO_PinCenter(inst "B")
+        s=CMO_PinCenter(inst "S")
+        d=CMO_PinCenter(inst "D")
+        p=CMO_PinCenter(inst pinName)
+        cond(
+            (equal(pinName "G") ref=b)
+            (equal(pinName "B") ref=g)
+            (equal(pinName "S") ref=d)
+            (equal(pinName "D") ref=s)
+            (t error("CMO: unsupported terminal %s.\n" pinName))
+        )
+        dx=car(p)-car(ref)
+        dy=cadr(p)-cadr(ref)
+        if(abs(dx)>=abs(dy)
+            then if(dx<0.0
+                then list(car(p)-CMO_STUB cadr(p))
+                else list(car(p)+CMO_STUB cadr(p)))
+            else if(dy<0.0
+                then list(car(p) cadr(p)-CMO_STUB)
+                else list(car(p) cadr(p)+CMO_STUB))
+        )
+    )
+)
+
+procedure(CMO_LabelMOSTerminal(cv inst pinName netName)
+    let((p e wire label)
+        p=CMO_PinCenter(inst pinName)
+        e=CMO_StubEnd(inst pinName)
+        wire=schCreateWire(cv "route" "full" list(p e) CMO_WIRE CMO_WIRE 0)
+        unless(wire error("CMO: stub creation failed on %s.%s.\n" inst~>name pinName))
+        label=schCreateWireLabel(cv car(wire) e netName "lowerLeft" "R0" "stick" CMO_WIRE nil)
+        unless(label error("CMO: label creation failed on %s.%s.\n" inst~>name pinName))
+        printf("CMO: STUB %s.%s -> %s\n" inst~>name pinName netName)
+        e
+    )
+)
+
+procedure(CMO_SetVDC(inst value)
+    let((cdf)
+        cdf=cdfGetInstCDF(inst)
+        unless(cdf error("CMO: VDC CDF missing on %s.\n" inst~>name))
+        unless(cdf->vdc error("CMO: VDC parameter missing on %s.\n" inst~>name))
+        cdf->vdc->value=value
+        t
+    )
+)
+
+procedure(CMO_VDCPinCenter(inst pinName)
+    let((term pin fig)
+        term=dbFindTermByName(inst~>master pinName)
+        unless(term error("CMO: VDC terminal %s missing on %s.\n" pinName inst~>name))
+        pin=car(term~>pins)
+        unless(pin error("CMO: VDC pin figure missing on %s.%s.\n" inst~>name pinName))
+        fig=pin~>fig
+        unless(fig error("CMO: VDC figure missing on %s.%s.\n" inst~>name pinName))
+        dbTransformPoint(centerBox(fig~>bBox) inst~>transform)
+    )
+)
+
+procedure(CMO_CreateVDC(cv master name xy value plusNet minusNet)
+    let((inst plus minus ep em wp wm)
+        inst=dbCreateInst(cv master name xy "R0")
+        unless(inst error("CMO: cannot create VDC %s.\n" name))
+        CMO_SetVDC(inst value)
+        plus=CMO_VDCPinCenter(inst "PLUS")
+        minus=CMO_VDCPinCenter(inst "MINUS")
+        ep=list(car(plus) cadr(plus)+CMO_STUB)
+        em=list(car(minus) cadr(minus)-CMO_STUB)
+        wp=schCreateWire(cv "route" "full" list(plus ep) CMO_WIRE CMO_WIRE 0)
+        wm=schCreateWire(cv "route" "full" list(minus em) CMO_WIRE CMO_WIRE 0)
+        unless(wp && wm error("CMO: VDC wiring failed for %s.\n" name))
+        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" CMO_WIRE nil)
+        schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" CMO_WIRE nil)
+        printf("CMO: VDC %s = %sV PLUS=%s MINUS=%s\n" name value plusNet minusNet)
+        inst
+    )
+)
+
+procedure(CMO_CreatePin(cv pinMaster name direction xy)
+    let((pin)
+        pin=schCreatePin(cv pinMaster name direction nil xy "R0")
+        unless(pin error("CMO: failed creating external pin %s.\n" name))
+        printf("CMO: PIN %s direction=%s at %L\n" name direction xy)
+        pin
+    )
+)
+procedure(CMO_PlacePMOSAuto(cv master name xy TotalW L NF M)
+    let((inst s d)
+        inst=CMO_PlaceMOS(cv master name xy TotalW L NF M "R0")
+        s=CMO_PinCenter(inst "S")
+        d=CMO_PinCenter(inst "D")
+        printf("CMO: PMOS %s candidate orient=%L S=%L D=%L\n" name inst~>orient s d)
+        if(cadr(s)>cadr(d)
+            then inst
+            else
+                dbDeleteObject(inst)
+                inst=CMO_PlaceMOS(cv master name xy TotalW L NF M "MX")
+                s=CMO_PinCenter(inst "S")
+                d=CMO_PinCenter(inst "D")
+                printf("CMO: PMOS %s fallback orient=%L S=%L D=%L\n" name inst~>orient s d)
+                unless(cadr(s)>cadr(d)
+                    error("CMO: PMOS %s cannot place source above drain in R0 or MX.\n" name))
+                inst
+        )
+    )
+)
+
+procedure(CreateCurrentMirror_OTA_TotalW_V1_20260817()
+    let((cv nmos pmos vdcMaster pinMaster M1 M2 M3 M4 M5 M6 M7 M8  V_VDD_SRC V_VBN_TAIL_SRC V_VBP_SRC V_VIP_SRC V_VIN_SRC V_VSS_SRC)
+
+        printf("\n============================================================\n")
+        printf(" Current-Mirror OTA - TotalW V1 - 2026-08-17\n")
+        printf("============================================================\n")
+        printf("VDD=1.50V  VSS=0V  TAIL BIAS: V_VBN_TAIL = 0.60V  LOAD: V_VBP = 0.90V\n")
+        printf("INPUTS: VIP = VIN = 0.75V  Current mirrors sum both branches into VOUT\n")
+        printf("OUTPUT: VOUT = M6.D/M8.D  TEMP=27C  CORNER=TT\n")
+        printf("DEVICE=CMO/CMO\n" CMO_LIB CMO_NMOS)
+        printf("DEVICE=CMO/CMO\n" CMO_LIB CMO_PMOS)
+        printf("STATUS=SCHEMATIC CANDIDATE; PERFORMANCE NOT VERIFIED\n")
+        printf("============================================================\n")
+
+        cv=geGetEditCellView()
+        unless(cv error("CMO: open a NEW EMPTY editable schematic first.\n"))
+        unless(null(cv~>instances)
+            error("CMO: target schematic is not empty. Use a new empty schematic.\n"))
+
+        nmos=CMO_OpenMaster(CMO_LIB CMO_NMOS)
+        pmos=CMO_OpenMaster(CMO_LIB CMO_PMOS)
+        vdcMaster=CMO_OpenMaster("analogLib" "vdc")
+        pinMaster=CMO_OpenMaster("basic" "iopin")
+
+        M1=CMO_PlaceMOS(cv nmos "M1" -5:0 "2u" "240n" "1" "1" "R0")
+        M2=CMO_PlaceMOS(cv nmos "M2" 5:0 "2u" "240n" "1" "1" "R0")
+        M3=CMO_PlacePMOSAuto(cv pmos "M3" -5:8 "4u" "480n" "1" "1")
+        M4=CMO_PlacePMOSAuto(cv pmos "M4" 5:8 "4u" "480n" "1" "1")
+        M5=CMO_PlaceMOS(cv nmos "M5" 5:0 "2u" "480n" "1" "1" "R0")
+        M6=CMO_PlaceMOS(cv nmos "M6" 5:-8 "4u" "480n" "1" "1" "R0")
+        M7=CMO_PlaceMOS(cv nmos "M7" 0:-6 "6u" "480n" "1" "1" "R0")
+        M8=CMO_PlacePMOSAuto(cv pmos "M8" 5:-2 "8u" "480n" "1" "1")
+
+        CMO_LabelMOSTerminal(cv M1 "G" "VIP")
+        CMO_LabelMOSTerminal(cv M1 "D" "NA")
+        CMO_LabelMOSTerminal(cv M1 "S" "TAIL")
+        CMO_LabelMOSTerminal(cv M1 "B" "VSS")
+        CMO_LabelMOSTerminal(cv M2 "G" "VIN")
+        CMO_LabelMOSTerminal(cv M2 "D" "NB")
+        CMO_LabelMOSTerminal(cv M2 "S" "TAIL")
+        CMO_LabelMOSTerminal(cv M2 "B" "VSS")
+        CMO_LabelMOSTerminal(cv M3 "G" "NA")
+        CMO_LabelMOSTerminal(cv M3 "D" "NA")
+        CMO_LabelMOSTerminal(cv M3 "S" "VDD")
+        CMO_LabelMOSTerminal(cv M3 "B" "VDD")
+        CMO_LabelMOSTerminal(cv M4 "G" "NA")
+        CMO_LabelMOSTerminal(cv M4 "D" "NB")
+        CMO_LabelMOSTerminal(cv M4 "S" "VDD")
+        CMO_LabelMOSTerminal(cv M4 "B" "VDD")
+        CMO_LabelMOSTerminal(cv M5 "G" "NB")
+        CMO_LabelMOSTerminal(cv M5 "D" "NB")
+        CMO_LabelMOSTerminal(cv M5 "S" "VSS")
+        CMO_LabelMOSTerminal(cv M5 "B" "VSS")
+        CMO_LabelMOSTerminal(cv M6 "G" "NB")
+        CMO_LabelMOSTerminal(cv M6 "D" "VOUT")
+        CMO_LabelMOSTerminal(cv M6 "S" "VSS")
+        CMO_LabelMOSTerminal(cv M6 "B" "VSS")
+        CMO_LabelMOSTerminal(cv M7 "G" "VBN_TAIL")
+        CMO_LabelMOSTerminal(cv M7 "D" "TAIL")
+        CMO_LabelMOSTerminal(cv M7 "S" "VSS")
+        CMO_LabelMOSTerminal(cv M7 "B" "VSS")
+        CMO_LabelMOSTerminal(cv M8 "G" "VBP")
+        CMO_LabelMOSTerminal(cv M8 "D" "VOUT")
+        CMO_LabelMOSTerminal(cv M8 "S" "VDD")
+        CMO_LabelMOSTerminal(cv M8 "B" "VDD")
+
+        V_VDD_SRC=CMO_CreateVDC(cv vdcMaster "V_VDD_SRC" 0:14 "1.50" "VDD" "VSS")
+        V_VBN_TAIL_SRC=CMO_CreateVDC(cv vdcMaster "V_VBN_TAIL_SRC" -12:0 "0.60" "VBN_TAIL" "VSS")
+        V_VBP_SRC=CMO_CreateVDC(cv vdcMaster "V_VBP_SRC" 12:8 "0.90" "VBP" "VSS")
+        V_VIP_SRC=CMO_CreateVDC(cv vdcMaster "V_VIP_SRC" -12:-4 "0.75" "VIP" "VSS")
+        V_VIN_SRC=CMO_CreateVDC(cv vdcMaster "V_VIN_SRC" 12:-4 "0.75" "VIN" "VSS")
+        V_VSS_SRC=CMO_CreateVDC(cv vdcMaster "V_VSS_SRC" 0:-10 "0.0" "VSS" "VSS")
+
+        CMO_CreatePin(cv pinMaster "VIP" "input" -10:-10)
+        CMO_CreatePin(cv pinMaster "VIN" "input" -7:-10)
+        CMO_CreatePin(cv pinMaster "VOUT" "output" 12:-8)
+        CMO_CreatePin(cv pinMaster "VDD" "input" 0:16)
+        CMO_CreatePin(cv pinMaster "VSS" "input" 0:-12)
+
+        schCheck(cv)
+        dbSave(cv)
+
+        printf("\n============================================================\n")
+        printf(" CMO GENERATOR COMPLETED\n")
+        printf(" CDF       : w/l/wf/fingers/simM/totalM/nf/m explicit\n")
+        printf(" ROUTING   : local isolated stub + net label\n")
+        printf(" STATUS    : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED\n")
+        printf("============================================================\n")
+        t
+    )
+)

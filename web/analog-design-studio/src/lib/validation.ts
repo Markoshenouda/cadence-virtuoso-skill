@@ -1,4 +1,4 @@
-import type { GeneratorEntry } from './repository-registry';
+import { technologies, type GeneratorEntry, type SpecRecord } from './repository-registry';
 
 export type DesignConfig = {
   circuitId: string;
@@ -7,25 +7,9 @@ export type DesignConfig = {
   vdd: number | null;
   temperature: number | null;
   corner: string;
-  specs: Record<string, { enabled: boolean; target: number | null; unit: string; operator: string }>;
+  specs: SpecRecord;
   sizingMethod: 'gmID' | 'wL' | 'manual' | 'ai';
   devices: Array<{ device: string; type: 'NMOS' | 'PMOS'; totalW: string; L: string; NF: number; M: number }>;
-};
-
-export const defaultSpecs = {
-  gain: { enabled: true, target: 60, unit: 'dB', operator: '>=' },
-  gbw: { enabled: true, target: 100, unit: 'MHz', operator: '>=' },
-  phaseMargin: { enabled: true, target: 60, unit: 'deg', operator: '>=' },
-  slewRate: { enabled: true, target: 100, unit: 'V/µs', operator: '>=' },
-  load: { enabled: true, target: 1, unit: 'pF', operator: '=' },
-  power: { enabled: true, target: 2, unit: 'mW', operator: '<=' },
-  noise: { enabled: false, target: null, unit: 'nV/√Hz', operator: '<=' },
-  psrr: { enabled: false, target: null, unit: 'dB', operator: '>=' },
-  cmrr: { enabled: false, target: null, unit: 'dB', operator: '>=' },
-  outputSwing: { enabled: false, target: null, unit: 'V', operator: '=' },
-  icmr: { enabled: false, target: null, unit: 'V', operator: '=' },
-  settling: { enabled: false, target: null, unit: 'ns', operator: '<=' },
-  offset: { enabled: false, target: null, unit: 'mV', operator: '<=' },
 };
 
 export type ValidationIssue = { level: 'error' | 'warning'; field: string; message: string };
@@ -35,7 +19,9 @@ export function validateDesign(config: DesignConfig, generator?: GeneratorEntry)
   if (!config.circuitId) issues.push({ level: 'error', field: 'circuit', message: 'Select a circuit.' });
   if (!config.topologyId) issues.push({ level: 'error', field: 'topology', message: 'Select a topology.' });
   if (!config.technologyId) issues.push({ level: 'error', field: 'technology', message: 'Select a technology / PDK.' });
-  if (config.technologyId !== 'tsmcN65') issues.push({ level: 'error', field: 'technology', message: 'This MVP currently exposes only the repository-supported tsmcN65 platform.' });
+  if (!technologies.some((technology) => technology.id === config.technologyId)) {
+    issues.push({ level: 'error', field: 'technology', message: `This MVP currently exposes only the repository-supported ${technologies.map((technology) => technology.id).join(', ')} platform.` });
+  }
   if (config.vdd == null || config.vdd <= 0) issues.push({ level: 'error', field: 'vdd', message: 'VDD must be greater than 0 V.' });
   if (config.temperature == null || !Number.isFinite(config.temperature)) issues.push({ level: 'error', field: 'temperature', message: 'Temperature is required.' });
   if (!['TT', 'SS', 'FF'].includes(config.corner)) issues.push({ level: 'error', field: 'corner', message: 'Process corner must be TT, SS, or FF.' });

@@ -2,7 +2,10 @@ name: Analog Design Studio
 
 on:
   push:
-    branches: ['feature/analog-design-studio-mvp']
+    branches: ['main', 'feature/analog-design-studio-mvp']
+    paths:
+      - 'web/analog-design-studio/**'
+      - '.github/workflows/analog-design-studio.yml'
   pull_request:
     paths:
       - 'web/analog-design-studio/**'
@@ -19,6 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+          cache: npm
+          cache-dependency-path: web/analog-design-studio/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build

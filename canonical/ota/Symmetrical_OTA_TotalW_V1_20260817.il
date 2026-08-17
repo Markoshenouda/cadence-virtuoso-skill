@@ -1,0 +1,323 @@
+;=============================================================================
+; Symmetrical OTA - TotalW V1 - 2026-08-17
+; Cadence Virtuoso IC6.1.7 / SKILL - PDK target: tsmcN65 - 2026-08-17
+;
+; TotalW-first generator: W/finger = TotalW/NF, totalM = NF*M.
+; Routing contract: one isolated labeled stub per terminal; no
+; device-to-device wires. Schematic candidate; electrical performance
+; is NOT verified. All source text is ASCII-only.
+;
+;   M1  NMOS input pair (G=VIP D=NA S=TAIL B=VSS)
+;   M2  NMOS input pair (G=VIN D=NB S=TAIL B=VSS)
+;   M3  NMOS diode mirror L (G=D=NA S=VSS B=VSS)
+;   M4  NMOS mirror L output (G=NA D=VOUT S=VSS B=VSS)
+;   M5  NMOS diode mirror R (G=D=NB S=VSS B=VSS)
+;   M6  NMOS mirror R output (G=NB D=VOUT S=VSS B=VSS)
+;   M7  NMOS tail source (G=VBN_TAIL D=TAIL S=VSS B=VSS)
+;   M8  PMOS output load (G=VBP D=VOUT S=VDD B=VDD)
+;=============================================================================
+
+(setq SYM_LIB "tsmcN65")
+(setq SYM_NMOS "nch")
+(setq SYM_PMOS "pch")
+(setq SYM_STUB 0.75)
+(setq SYM_WIRE 0.0625)
+procedure(SYM_ToFloat(val)
+    cond(
+        (numberp(val) float(val))
+        (stringp(val)
+            let((parsed)
+                parsed=nil
+                errset(parsed=cdfParseFloatString(val) t)
+                parsed
+            )
+        )
+        (t nil)
+    )
+)
+
+procedure(SYM_ValueMatches(got expect)
+    let((gn en)
+        gn=SYM_ToFloat(got)
+        en=SYM_ToFloat(expect)
+        if(gn && en
+            then abs(gn-en) < 1e-12 * max(1.0 abs(en))
+            else equal(got expect)
+        )
+    )
+)
+
+procedure(SYM_OpenMaster(lib cell)
+    let((master)
+        master=dbOpenCellViewByType(lib cell "symbol" "" "r")
+        unless(master
+            error("SYM: cannot open %s/%s/symbol.\n" lib cell)
+        )
+        master
+    )
+)
+
+procedure(SYM_SetMOS(inst TotalW L NF M)
+    let((cdf nfInt mInt WperFinger totalM)
+        cdf=cdfGetInstCDF(inst)
+        unless(cdf error("SYM: CDF missing on %s.\n" inst~>name))
+        unless(cdf->w && cdf->l && cdf->wf && cdf->fingers && cdf->simM && cdf->totalM && cdf->nf && cdf->m
+            error("SYM: incomplete MOS CDF on %s.\n" inst~>name))
+        nfInt=atoi(NF)
+        mInt=atoi(M)
+        unless(nfInt>0 error("SYM: NF must be >= 1 on %s.\n" inst~>name))
+        unless(mInt>0 error("SYM: M must be >= 1 on %s.\n" inst~>name))
+        WperFinger=SYM_ToFloat(TotalW)/float(nfInt)
+        totalM=sprintf(nil "%d" (nfInt*mInt))
+        cdf->w->value=sprintf(nil "%g" WperFinger)
+        cdf->l->value=L
+        cdf->wf->value=TotalW
+        cdf->fingers->value=NF
+        cdf->simM->value=M
+        cdf->totalM->value=totalM
+        cdf->nf->value=NF
+        cdf->m->value=M
+        unless(SYM_ValueMatches(cdf->w->value WperFinger)
+            error("SYM: W/finger read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->l->value L)
+            error("SYM: L read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->wf->value TotalW)
+            error("SYM: TotalW read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->fingers->value NF)
+            error("SYM: fingers read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->simM->value M)
+            error("SYM: simM read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->totalM->value totalM)
+            error("SYM: totalM read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->nf->value NF)
+            error("SYM: nf read-back mismatch on %s.\n" inst~>name))
+        unless(SYM_ValueMatches(cdf->m->value M)
+            error("SYM: m read-back mismatch on %s.\n" inst~>name))
+        printf("SYM: %s TotalW=%s W/finger=%s L=%s NF=%s M=%s totalM=%s\n"
+            inst~>name TotalW cdf->w->value L NF M totalM)
+        t
+    )
+)
+
+procedure(SYM_PinCenter(inst pinName)
+    let((term pin fig)
+        term=dbFindTermByName(inst~>master pinName)
+        unless(term error("SYM: terminal %s missing on %s.\n" pinName inst~>name))
+        pin=car(term~>pins)
+        unless(pin error("SYM: pin figure missing on %s.%s.\n" inst~>name pinName))
+        fig=pin~>fig
+        unless(fig error("SYM: figure missing on %s.%s.\n" inst~>name pinName))
+        dbTransformPoint(centerBox(fig~>bBox) inst~>transform)
+    )
+)
+
+procedure(SYM_PlaceMOS(cv master name xy TotalW L NF M orient)
+    let((inst)
+        inst=dbCreateInst(cv master name xy orient)
+        unless(inst error("SYM: cannot create %s.\n" name))
+        SYM_SetMOS(inst TotalW L NF M)
+        inst
+    )
+)
+
+procedure(SYM_StubEnd(inst pinName)
+    let((g b s d p ref dx dy)
+        g=SYM_PinCenter(inst "G")
+        b=SYM_PinCenter(inst "B")
+        s=SYM_PinCenter(inst "S")
+        d=SYM_PinCenter(inst "D")
+        p=SYM_PinCenter(inst pinName)
+        cond(
+            (equal(pinName "G") ref=b)
+            (equal(pinName "B") ref=g)
+            (equal(pinName "S") ref=d)
+            (equal(pinName "D") ref=s)
+            (t error("SYM: unsupported terminal %s.\n" pinName))
+        )
+        dx=car(p)-car(ref)
+        dy=cadr(p)-cadr(ref)
+        if(abs(dx)>=abs(dy)
+            then if(dx<0.0
+                then list(car(p)-SYM_STUB cadr(p))
+                else list(car(p)+SYM_STUB cadr(p)))
+            else if(dy<0.0
+                then list(car(p) cadr(p)-SYM_STUB)
+                else list(car(p) cadr(p)+SYM_STUB))
+        )
+    )
+)
+
+procedure(SYM_LabelMOSTerminal(cv inst pinName netName)
+    let((p e wire label)
+        p=SYM_PinCenter(inst pinName)
+        e=SYM_StubEnd(inst pinName)
+        wire=schCreateWire(cv "route" "full" list(p e) SYM_WIRE SYM_WIRE 0)
+        unless(wire error("SYM: stub creation failed on %s.%s.\n" inst~>name pinName))
+        label=schCreateWireLabel(cv car(wire) e netName "lowerLeft" "R0" "stick" SYM_WIRE nil)
+        unless(label error("SYM: label creation failed on %s.%s.\n" inst~>name pinName))
+        printf("SYM: STUB %s.%s -> %s\n" inst~>name pinName netName)
+        e
+    )
+)
+
+procedure(SYM_SetVDC(inst value)
+    let((cdf)
+        cdf=cdfGetInstCDF(inst)
+        unless(cdf error("SYM: VDC CDF missing on %s.\n" inst~>name))
+        unless(cdf->vdc error("SYM: VDC parameter missing on %s.\n" inst~>name))
+        cdf->vdc->value=value
+        t
+    )
+)
+
+procedure(SYM_VDCPinCenter(inst pinName)
+    let((term pin fig)
+        term=dbFindTermByName(inst~>master pinName)
+        unless(term error("SYM: VDC terminal %s missing on %s.\n" pinName inst~>name))
+        pin=car(term~>pins)
+        unless(pin error("SYM: VDC pin figure missing on %s.%s.\n" inst~>name pinName))
+        fig=pin~>fig
+        unless(fig error("SYM: VDC figure missing on %s.%s.\n" inst~>name pinName))
+        dbTransformPoint(centerBox(fig~>bBox) inst~>transform)
+    )
+)
+
+procedure(SYM_CreateVDC(cv master name xy value plusNet minusNet)
+    let((inst plus minus ep em wp wm)
+        inst=dbCreateInst(cv master name xy "R0")
+        unless(inst error("SYM: cannot create VDC %s.\n" name))
+        SYM_SetVDC(inst value)
+        plus=SYM_VDCPinCenter(inst "PLUS")
+        minus=SYM_VDCPinCenter(inst "MINUS")
+        ep=list(car(plus) cadr(plus)+SYM_STUB)
+        em=list(car(minus) cadr(minus)-SYM_STUB)
+        wp=schCreateWire(cv "route" "full" list(plus ep) SYM_WIRE SYM_WIRE 0)
+        wm=schCreateWire(cv "route" "full" list(minus em) SYM_WIRE SYM_WIRE 0)
+        unless(wp && wm error("SYM: VDC wiring failed for %s.\n" name))
+        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" SYM_WIRE nil)
+        schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" SYM_WIRE nil)
+        printf("SYM: VDC %s = %sV PLUS=%s MINUS=%s\n" name value plusNet minusNet)
+        inst
+    )
+)
+
+procedure(SYM_CreatePin(cv pinMaster name direction xy)
+    let((pin)
+        pin=schCreatePin(cv pinMaster name direction nil xy "R0")
+        unless(pin error("SYM: failed creating external pin %s.\n" name))
+        printf("SYM: PIN %s direction=%s at %L\n" name direction xy)
+        pin
+    )
+)
+procedure(SYM_PlacePMOSAuto(cv master name xy TotalW L NF M)
+    let((inst s d)
+        inst=SYM_PlaceMOS(cv master name xy TotalW L NF M "R0")
+        s=SYM_PinCenter(inst "S")
+        d=SYM_PinCenter(inst "D")
+        printf("SYM: PMOS %s candidate orient=%L S=%L D=%L\n" name inst~>orient s d)
+        if(cadr(s)>cadr(d)
+            then inst
+            else
+                dbDeleteObject(inst)
+                inst=SYM_PlaceMOS(cv master name xy TotalW L NF M "MX")
+                s=SYM_PinCenter(inst "S")
+                d=SYM_PinCenter(inst "D")
+                printf("SYM: PMOS %s fallback orient=%L S=%L D=%L\n" name inst~>orient s d)
+                unless(cadr(s)>cadr(d)
+                    error("SYM: PMOS %s cannot place source above drain in R0 or MX.\n" name))
+                inst
+        )
+    )
+)
+
+procedure(CreateSymmetrical_OTA_TotalW_V1_20260817()
+    let((cv nmos pmos vdcMaster pinMaster M1 M2 M3 M4 M5 M6 M7 M8  V_VDD_SRC V_VBN_TAIL_SRC V_VBP_SRC V_VIP_SRC V_VIN_SRC V_VSS_SRC)
+
+        printf("\n============================================================\n")
+        printf(" Symmetrical OTA - TotalW V1 - 2026-08-17\n")
+        printf("============================================================\n")
+        printf("VDD=1.50V  TAIL BIAS: V_VBN_TAIL = 0.60V  LOAD BIAS: V_VBP = 0.90V\n")
+        printf("Symmetrical NMOS mirrors sum both input branches into VOUT\n")
+        printf("OUTPUT: VOUT = M4.D/M6.D/M8.D  TEMP=27C  CORNER=TT\n")
+        printf("DEVICE=SYM/SYM\n" SYM_LIB SYM_NMOS)
+        printf("DEVICE=SYM/SYM\n" SYM_LIB SYM_PMOS)
+        printf("STATUS=SCHEMATIC CANDIDATE; PERFORMANCE NOT VERIFIED\n")
+        printf("============================================================\n")
+
+        cv=geGetEditCellView()
+        unless(cv error("SYM: open a NEW EMPTY editable schematic first.\n"))
+        unless(null(cv~>instances)
+            error("SYM: target schematic is not empty. Use a new empty schematic.\n"))
+
+        nmos=SYM_OpenMaster(SYM_LIB SYM_NMOS)
+        pmos=SYM_OpenMaster(SYM_LIB SYM_PMOS)
+        vdcMaster=SYM_OpenMaster("analogLib" "vdc")
+        pinMaster=SYM_OpenMaster("basic" "iopin")
+
+        M1=SYM_PlaceMOS(cv nmos "M1" -5:0 "2u" "240n" "1" "1" "R0")
+        M2=SYM_PlaceMOS(cv nmos "M2" 5:0 "2u" "240n" "1" "1" "R0")
+        M3=SYM_PlaceMOS(cv nmos "M3" -5:-6 "2u" "480n" "1" "1" "R0")
+        M4=SYM_PlaceMOS(cv nmos "M4" -5:-12 "4u" "480n" "1" "1" "R0")
+        M5=SYM_PlaceMOS(cv nmos "M5" 5:-6 "2u" "480n" "1" "1" "R0")
+        M6=SYM_PlaceMOS(cv nmos "M6" 5:-12 "4u" "480n" "1" "1" "R0")
+        M7=SYM_PlaceMOS(cv nmos "M7" 0:6 "6u" "480n" "1" "1" "R0")
+        M8=SYM_PlacePMOSAuto(cv pmos "M8" 10:-12 "8u" "480n" "1" "1")
+
+        SYM_LabelMOSTerminal(cv M1 "G" "VIP")
+        SYM_LabelMOSTerminal(cv M1 "D" "NA")
+        SYM_LabelMOSTerminal(cv M1 "S" "TAIL")
+        SYM_LabelMOSTerminal(cv M1 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M2 "G" "VIN")
+        SYM_LabelMOSTerminal(cv M2 "D" "NB")
+        SYM_LabelMOSTerminal(cv M2 "S" "TAIL")
+        SYM_LabelMOSTerminal(cv M2 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M3 "G" "NA")
+        SYM_LabelMOSTerminal(cv M3 "D" "NA")
+        SYM_LabelMOSTerminal(cv M3 "S" "VSS")
+        SYM_LabelMOSTerminal(cv M3 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M4 "G" "NA")
+        SYM_LabelMOSTerminal(cv M4 "D" "VOUT")
+        SYM_LabelMOSTerminal(cv M4 "S" "VSS")
+        SYM_LabelMOSTerminal(cv M4 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M5 "G" "NB")
+        SYM_LabelMOSTerminal(cv M5 "D" "NB")
+        SYM_LabelMOSTerminal(cv M5 "S" "VSS")
+        SYM_LabelMOSTerminal(cv M5 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M6 "G" "NB")
+        SYM_LabelMOSTerminal(cv M6 "D" "VOUT")
+        SYM_LabelMOSTerminal(cv M6 "S" "VSS")
+        SYM_LabelMOSTerminal(cv M6 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M7 "G" "VBN_TAIL")
+        SYM_LabelMOSTerminal(cv M7 "D" "TAIL")
+        SYM_LabelMOSTerminal(cv M7 "S" "VSS")
+        SYM_LabelMOSTerminal(cv M7 "B" "VSS")
+        SYM_LabelMOSTerminal(cv M8 "G" "VBP")
+        SYM_LabelMOSTerminal(cv M8 "D" "VOUT")
+        SYM_LabelMOSTerminal(cv M8 "S" "VDD")
+        SYM_LabelMOSTerminal(cv M8 "B" "VDD")
+
+        V_VDD_SRC=SYM_CreateVDC(cv vdcMaster "V_VDD_SRC" 0:12 "1.50" "VDD" "VSS")
+        V_VBN_TAIL_SRC=SYM_CreateVDC(cv vdcMaster "V_VBN_TAIL_SRC" -12:6 "0.60" "VBN_TAIL" "VSS")
+        V_VBP_SRC=SYM_CreateVDC(cv vdcMaster "V_VBP_SRC" 14:-8 "0.90" "VBP" "VSS")
+        V_VIP_SRC=SYM_CreateVDC(cv vdcMaster "V_VIP_SRC" -12:0 "0.75" "VIP" "VSS")
+        V_VIN_SRC=SYM_CreateVDC(cv vdcMaster "V_VIN_SRC" 12:0 "0.75" "VIN" "VSS")
+        V_VSS_SRC=SYM_CreateVDC(cv vdcMaster "V_VSS_SRC" 0:-16 "0.0" "VSS" "VSS")
+
+        SYM_CreatePin(cv pinMaster "VIP" "input" -10:10)
+        SYM_CreatePin(cv pinMaster "VIN" "input" 10:10)
+        SYM_CreatePin(cv pinMaster "VOUT" "output" 14:-14)
+        SYM_CreatePin(cv pinMaster "VDD" "input" 0:14)
+        SYM_CreatePin(cv pinMaster "VSS" "input" 0:-18)
+
+        schCheck(cv)
+        dbSave(cv)
+
+        printf("\n============================================================\n")
+        printf(" SYM GENERATOR COMPLETED\n")
+        printf(" CDF       : w/l/wf/fingers/simM/totalM/nf/m explicit\n")
+        printf(" ROUTING   : local isolated stub + net label\n")
+        printf(" STATUS    : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED\n")
+        printf("============================================================\n")
+        t
+    )
+)
