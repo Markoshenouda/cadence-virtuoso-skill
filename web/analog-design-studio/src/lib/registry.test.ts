@@ -21,18 +21,26 @@ describe('Analog Design Studio repository model', () => {
   it('exposes the Current Mirror as an available circuit with its topology', () => {
     const circuit = circuits.find(c => c.id === 'current-mirror');
     expect(circuit?.status).toBe('available');
-    expect(circuit?.topologies.map(t => t.id)).toEqual(['simple-current-mirror', 'cascode-current-mirror', 'pmos-current-mirror']);
-    expect(circuit?.topologies[0].generator.status).toBe('candidate');
-    expect(circuit?.topologies[0].generator.path).toContain('Current_Mirror_NMOS_TotalW_V1_20260817.il');
-    expect(circuit?.topologies[0].generator.invocation).toBe('CreateCurrentMirror_NMOS_TotalW_V1_20260817()');
+    expect(circuit?.topologies.length).toBe(12);
+    expect(circuit?.topologies.map(t => t.id)).toContain('simple-current-mirror');
+    expect(circuit?.topologies.map(t => t.id)).toContain('cascode-current-mirror');
+    expect(circuit?.topologies.map(t => t.id)).toContain('pmos-current-mirror');
+    const cmFirst = circuit?.topologies.find(t => t.id === 'simple-current-mirror');
+    expect(cmFirst?.generator.status).toBe('candidate');
+    expect(cmFirst?.generator.path).toContain('Current_Mirror_NMOS_TotalW_V1_20260817.il');
+    expect(cmFirst?.generator.invocation).toBe('CreateCurrentMirror_NMOS_TotalW_V1_20260817()');
   });
   it('exposes the Differential Pair and Amplifier circuits as available', () => {
     const diffPair = circuits.find(c => c.id === 'differential-pair');
     expect(diffPair?.status).toBe('available');
-    expect(diffPair?.topologies.map(t => t.id)).toEqual(['differential-pair-nmos']);
+    expect(diffPair?.topologies.length).toBe(5);
+    expect(diffPair?.topologies.map(t => t.id)).toContain('differential-pair-nmos');
     const amplifier = circuits.find(c => c.id === 'amplifier');
     expect(amplifier?.status).toBe('available');
-    expect(amplifier?.topologies.map(t => t.id)).toEqual(['common-source', 'source-follower', 'cascode-amplifier']);
+    expect(amplifier?.topologies.length).toBe(15);
+    expect(amplifier?.topologies.map(t => t.id)).toContain('common-source');
+    expect(amplifier?.topologies.map(t => t.id)).toContain('source-follower');
+    expect(amplifier?.topologies.map(t => t.id)).toContain('cascode-amplifier');
     expect(Object.keys(defaultSpecsFor('differential-pair')).sort()).toEqual(['gm', 'icmr', 'offset', 'tailCurrent']);
     expect(Object.keys(defaultSpecsFor('amplifier')).sort()).toEqual(['gain', 'gbw', 'noise', 'outputSwing', 'power']);
   });

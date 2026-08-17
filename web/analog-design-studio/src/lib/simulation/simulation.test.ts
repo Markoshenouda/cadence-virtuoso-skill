@@ -28,30 +28,34 @@ const ampConfig: DesignConfig = {
 };
 
 describe('simulation contract (registry-driven)', () => {
-  it('resolves a simulation contract for every registered topology', () => {
-    for (const circuit of circuits) {
-      for (const topology of circuit.topologies) {
-        const contract = getSimulationContract(topology.id, 'tsmcN65');
-        expect(contract.profile.id, topology.id).toBeTruthy();
-        expect(contract.simulation.devices.length, topology.id).toBeGreaterThan(0);
-        expect(contract.simulation.nodes.ground, topology.id).toBeTruthy();
-      }
+  /** Topologies that declare simulation metadata (others are schematic-only). */
+  const simTopologies = circuits.flatMap(c => c.topologies.filter(t => t.simulation));
+
+  it('resolves a simulation contract for every topology that declares simulation metadata', () => {
+    for (const topology of simTopologies) {
+      const contract = getSimulationContract(topology.id, 'tsmcN65');
+      expect(contract.profile.id, topology.id).toBeTruthy();
+      expect(contract.simulation.devices.length, topology.id).toBeGreaterThan(0);
+      expect(contract.simulation.nodes.ground, topology.id).toBeTruthy();
     }
   });
 
   it('keeps simulation device lists consistent with the generator contract', () => {
-    for (const circuit of circuits) {
-      for (const topology of circuit.topologies) {
-        const contract = getSimulationContract(topology.id, 'tsmcN65');
-        const generatorDevices = topology.contract.devices.map(d => d.device).sort();
-        const simulationDevices = contract.simulation.devices.map(d => d.device).sort();
-        expect(simulationDevices, topology.id).toEqual(generatorDevices);
-      }
+    for (const topology of simTopologies) {
+      const contract = getSimulationContract(topology.id, 'tsmcN65');
+      const generatorDevices = topology.contract.devices.map(d => d.device).sort();
+      const simulationDevices = contract.simulation.devices.map(d => d.device).sort();
+      expect(simulationDevices, topology.id).toEqual(generatorDevices);
     }
   });
 
   it('rejects unknown topologies and requires simulation metadata', () => {
     expect(() => getSimulationContract('not-a-topology', 'tsmcN65')).toThrow(/No topology registered for simulation/);
+    // Topologies without simulation metadata must throw
+    const noSim = circuits.flatMap(c => c.topologies.filter(t => !t.simulation));
+    for (const topology of noSim) {
+      expect(() => getSimulationContract(topology.id, 'tsmcN65'), topology.id).toThrow(/does not declare simulation metadata/);
+    }
     expect(simulationProfiles['dc-mirror'].analyses).toHaveLength(1);
   });
 });
