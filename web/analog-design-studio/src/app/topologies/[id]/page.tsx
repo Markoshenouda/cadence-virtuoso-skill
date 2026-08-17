@@ -6,7 +6,7 @@ import { StatusPill } from '@/components/status-pill';
 import shell from '@/components/shell.module.css';
 import styles from '../topologies.module.css';
 
-const GITHUB_BASE = 'https://github.com/Markoshenouda/cadence-virtuoso-skill/blob/feature/analog-design-studio-mvp/';
+const GITHUB_BASE = 'https://github.com/Markoshenouda/cadence-virtuoso-skill/blob/feature/topology-registry-integration/';
 
 export default function TopologyDetailPage({ params }: { params: { id: string } }) {
   const found = findTopology(params.id);

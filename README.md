@@ -96,3 +96,48 @@ Create5TOTA_PMOSIN_MAC_V1_20260814()
 ```
 
 For Telescopic V8 use [the V8 runbook](runbooks/RUN_telescopic_ota_v8_20260813.md); the [V7 runbook](runbooks/RUN_telescopic_ota_v7_20260812.md) documents the 2026-08-12 verified run. New designs follow: specification extraction → missing-spec questions → design confirmation → sizing → sizing confirmation → one-shot generator → Cadence execution → verification → canonical promotion.
+
+## Analog Design Studio (web)
+
+`web/analog-design-studio/` is a Next.js application that exposes every registered topology through a browser-based design wizard. The registry (`src/lib/repository-registry.ts`) is the single source of truth — topology IDs, device metadata, generator paths, runbook links, verification status, specification groups, and simulation contracts all flow from there.
+
+### Quick start
+
+```bash
+cd web/analog-design-studio
+npm install
+npm run dev        # http://localhost:3000
+npm test           # vitest (71 tests)
+npm run typecheck  # tsc --noEmit
+npm run build      # next build
+```
+
+### Architecture
+
+```text
+repository-registry.ts   ← single source of truth (44 topologies, 6 families)
+  ├─ topology explorer   (/topologies) — cards derived from circuits[]
+  ├─ detail pages        (/topologies/[id]) — topology findTopology(id)
+  ├─ design wizard       (/new) — spec-first flow, registry-driven defaults
+  ├─ generator contracts  (generator-contract.ts) — auto-derived from registry
+  ├─ simulation contracts (simulation-contract.ts) — netlists for 38 sim-ready topologies
+  ├─ topology diagrams    (topology-diagram.tsx) — 44 engineering SVGs
+  └─ tests               (registry.test.ts, simulation.test.ts, diagram.test.ts)
+```
+
+### Topology families (as of 2026-08-18)
+
+| Family | Topologies | Simulation-ready |
+|---|---|---|
+| OTA | 8 (5T, telescopic, folded-cascode, two-stage Miller, symmetrical, three-stage, current-mirror OTA, fully-diff folded) | 5 of 8 |
+| Current Mirror | 12 (simple, cascode NMOS/PMOS, PMOS, Wilson, regulated-cascode, wide-swing, dual-output, complementary, cascode NMOS/PMOS current sources, cascode bias stack) | 12 of 12 |
+| Differential Pair | 5 (NMOS, PMOS, PMOS-load, folded, cascode-tail) | 5 of 5 |
+| Amplifier | 15 (common-source, diode-load CS, source follower, PMOS follower, super follower, complementary follower, cascode NMOS/PMOS, folded-cascode NMOS/PMOS, common-gate NMOS/PMOS, inverter, TIA, class-AB) | 14 of 15 |
+| Comparator | 3 (CMOS, two-stage, StrongARM) | 1 of 3 |
+| gm-C | 1 (gm-C integrator) | 0 of 1 |
+
+Six topologies are schematic-only (no simulation metadata): two-stage-miller-ota, three-stage-ota, fully-diff-folded-cascode-ota, class-ab-output-stage, strongarm-comparator, gmc-integrator. Calling `getSimulationContract()` on them throws a clear error.
+
+### Electrical verification
+
+Only topologies with actual Spectre simulation results in the verification ledger are called electrically verified. As of 2026-08-18: Source Follower (gain, power, slew PASS). Other topologies that simulate produce honest measurement reports — specification failures are reported as failures, not hidden.
