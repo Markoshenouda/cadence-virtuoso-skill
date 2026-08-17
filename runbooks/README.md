@@ -35,3 +35,4 @@ Use a new empty schematic for first execution. Read the runbook associated with 
 ## Execution environments
 
 Manual runbooks transfer artifacts with `scp` to `cadence@192.168.75.217:/home/cadence/`. Historical runbooks reference `192.168.75.216` (retired host, evidence only). The Analog Design Studio web bridge (`web/analog-design-studio`) targets its own environment (`192.168.75.219` by default) and is configured through `CADENCE_*` environment variables, not through these runbooks.
+- 34 further `RUN_*_TotalW_V1_20260817.md` runbooks for the 2026-08-17 topology expansion batch (mirrors/sources, differential stages, amplifiers, OTAs, comparators, gm-C). See the folder listing; each documents SIMULATION_READY or SCHEMATIC_ONLY status.

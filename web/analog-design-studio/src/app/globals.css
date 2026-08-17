@@ -2,7 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  /* surfaces */
+  --bg-base: #080B10;
+  --bg-sidebar: #0A0E14;
+  --bg-panel: #0C1118;
+  --bg-panel-raised: #0D141D;
+  --bg-sunken: #090E14;
+  --bg-hover: #101620;
+  --bg-active: #121A25;
+  /* borders */
+  --border-subtle: #1C2430;
+  --border-default: #202A38;
+  --border-strong: #2A3A4E;
+  --border-accent: #3E5A78;
+  /* accent */
+  --accent: #7ABFFF;
+  --accent-bright: #8BD0FF;
+  --accent-bg: #17324A;
+  --accent-bg-hover: #1B3D5A;
+  --accent-border: #4C83B0;
+  --accent-input-border: #517FA8;
+  /* semantic */
+  --success: #5DE0A7;
+  --success-text: #6DD9A7;
+  --success-border: #255740;
+  --success-bg: #0C2119;
+  --candidate: #F0C778;
+  --candidate-border: #5A4520;
+  --candidate-bg: #211A0D;
+  --fail: #E78989;
+  --fail-border: #5A2A2A;
+  --fail-bg: #241214;
+  --warning: #D8B36B;
+  /* text */
+  --text-primary: #E7EDF7;
+  --text-secondary: #B8C4D2;
+  --text-tertiary: #7C8B9D;
+  --text-faint: #5E6D80;
+  --text-disabled: #4E5C6D;
+  /* typography */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-page: 26px;
+  --text-section: 16px;
+  --text-card: 13px;
+  --text-body: 12px;
+  --text-small: 11px;
+  --text-meta: 10px;
+  --text-micro: 9px;
+  --text-code: 11px;
+  --text-stat: 22px;
+  /* radius */
+  --radius-pill: 5px;
+  --radius-control: 8px;
+  --radius-card: 11px;
+  --radius-panel: 14px;
+  /* shadows */
+  --shadow-resting: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-hover: 0 6px 16px rgba(0, 0, 0, .45);
+  /* motion */
+  --ease: cubic-bezier(.2, 0, 0, 1);
+  --dur-hover: 150ms;
+  --dur-fade: 180ms;
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: #080b10; color: #e7edf7; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 button, input, select { font: inherit; }
@@ -18,3 +82,6 @@ button:disabled { cursor: not-allowed; }
 .diagram .mosLabel { fill: #d6dfed; font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .diagram .netLabel, .diagram .supplyLabel { fill: #7e8da1; font-size: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .diagram .supply { stroke: #5de0a7; stroke-width: 1.4; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

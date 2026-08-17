@@ -614,6 +614,15 @@ export const circuits: Circuit[] = [
 export const getCircuit = (id: string) => circuits.find((c) => c.id === id);
 export const getTopology = (circuitId: string, topologyId: string) => getCircuit(circuitId)?.topologies.find((t) => t.id === topologyId);
 
+/** Find a topology and its owning circuit by scanning every circuit family. */
+export const findTopology = (topologyId: string): { circuit: Circuit; topology: Topology } | undefined => {
+  for (const circuit of circuits) {
+    const topology = circuit.topologies.find((t) => t.id === topologyId);
+    if (topology) return { circuit, topology };
+  }
+  return undefined;
+};
+
 /** Initial spec record for a circuit, derived from the registry spec definitions. */
 export function defaultSpecsFor(circuitId: string): SpecRecord {
   const groups = getCircuit(circuitId)?.specGroups ?? [];
