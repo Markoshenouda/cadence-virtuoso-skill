@@ -247,6 +247,12 @@ npm test
 
 CI tests the bridge logic only; it never starts Cadence.
 
+## Spectre simulation (netlist mode)
+
+`POST /api/simulation/run` generates a standalone Spectre deck from registry simulation metadata (netlists mirror the canonical generator label tables), stages it on the VM, runs netlist-mode Spectre (`dcop`/`ac`/`tran` per profile), parses psfascii results, extracts measurements, and evaluates the enabled specifications. Every stage is reported separately (`deckGenerated`, `staged`, `launched`, `analysesCompleted`, `measurementsExtracted`, `specEvaluationCompleted`, `specsPassed`); `electrically-verified` requires simulation completion plus passing measured specs. Schematic generation alone is never electrical verification, and a `specs-failed` result stays distinct from `sim-failed`.
+
+Environment additions: `CADENCE_SPECTRE_BIN`, `CADENCE_SPECTRE_LD_LIBRARY_PATH`, `CADENCE_SPECTRE_MODEL` (defaults target the verified VM: MMSIM 14.10 64-bit and the TSMC CRN65LP `models/spectre/toplevel.scs` with `tt_lib`/`ss_lib`/`ff_lib` corner sections). Simulation profiles live in `src/lib/simulation/simulation-contract.ts`; topology netlists/bias sets live in the registry `simulation` metadata.
+
 ## Adding a new topology
 
 The repository registry (`src/lib/repository-registry.ts`) is the single source of truth; contracts, the wizard, diagrams, and spec forms all derive from it.

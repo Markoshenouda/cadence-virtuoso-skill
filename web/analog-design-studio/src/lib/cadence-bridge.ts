@@ -21,6 +21,9 @@ export type CadenceBridgeConfig = {
   library: string;
   timeoutMs: number;
   sshKeyPath?: string;
+  spectreBin: string;
+  spectreLdLibraryPath: string;
+  spectreModel: string;
 };
 
 export type CadenceExecutionStatus = 'disabled' | 'dry-run' | 'succeeded' | 'failed' | 'timeout';
@@ -53,6 +56,8 @@ export type CadenceExecutionResult = {
 const DEFAULT_VIRTUOSO = '/usr/local/cadence/IC617/tools/dfII/bin/virtuoso';
 const DEFAULT_CADENCE_ROOT = '/usr/local/cadence/IC617';
 const DEFAULT_PDK_ROOT = '/home/cadence/Desktop/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914';
+const DEFAULT_SPECTRE_BIN = '/usr/local/cadence/MMSIM141/tools.lnx86/spectre/bin/64bit/spectre';
+const DEFAULT_SPECTRE_LIBS = '/usr/local/cadence/MMSIM141/tools.lnx86/lib/64bit:/usr/local/cadence/MMSIM141/tools.lnx86/inca/lib/64bit:/usr/local/cadence/MMSIM141/tools.lnx86/ktl/lib/64bit:/usr/local/cadence/MMSIM141/tools.lnx86/mdl/lib/64bit:/usr/local/cadence/MMSIM141/tools.lnx86/cmi/lib/64bit:/usr/local/cadence/MMSIM141/tools.lnx86/behnm/lib/64bit:/usr/local/cadence/MMSIM141/tools.lnx86/behav/lib/64bit';
 const DEFAULT_TIMEOUT = 180_000;
 const SAFE_REMOTE = /^\/[A-Za-z0-9_./-]+$/;
 const SAFE_HOST = /^[A-Za-z0-9._:-]+$/;
@@ -85,6 +90,9 @@ export function getCadenceBridgeConfig(env: Partial<NodeJS.ProcessEnv> = process
     library: env.CADENCE_LIBRARY ?? 'BGR_ADI',
     timeoutMs: positiveInt(env.CADENCE_TIMEOUT_MS, DEFAULT_TIMEOUT),
     sshKeyPath: env.CADENCE_SSH_KEY,
+    spectreBin: env.CADENCE_SPECTRE_BIN ?? DEFAULT_SPECTRE_BIN,
+    spectreLdLibraryPath: env.CADENCE_SPECTRE_LD_LIBRARY_PATH ?? DEFAULT_SPECTRE_LIBS,
+    spectreModel: env.CADENCE_SPECTRE_MODEL ?? `${DEFAULT_PDK_ROOT}/models/spectre/toplevel.scs`,
   };
   requireSafe(config.host, SAFE_HOST, 'SSH host');
   requireSafe(config.user, SAFE_TOKEN, 'SSH user');
@@ -95,6 +103,16 @@ export function getCadenceBridgeConfig(env: Partial<NodeJS.ProcessEnv> = process
   requireSafe(config.library, SAFE_TOKEN, 'library');
   if (!/^:[0-9]+$/.test(config.display)) throw new Error('CADENCE_DISPLAY must look like :0, :1, etc.');
   if (config.sshKeyPath) requireSafe(config.sshKeyPath, /^[A-Za-z0-9_./:\-]+$/, 'CADENCE_SSH_KEY');
+  requireSafe(config.spectreBin, SAFE_REMOTE, 'spectre binary');
+  requireSafe(config.spectreModel, SAFE_REMOTE, 'spectre model file');
+  if (config.spectreLdLibraryPath.replace(/:/g, '') !== config.spectreLdLibraryPath) {
+    // colon-separated library path: validate each entry
+    for (const entry of config.spectreLdLibraryPath.split(':')) {
+      if (entry) requireSafe(entry, SAFE_REMOTE, 'spectre library path entry');
+    }
+  } else {
+    requireSafe(config.spectreLdLibraryPath, SAFE_REMOTE, 'spectre library path');
+  }
   return config;
 }
 
@@ -102,25 +120,25 @@ function safeName(value: string) {
   return value.replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
-function shellQuote(value: string) {
+export function shellQuote(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
-function sshArgs(config: CadenceBridgeConfig, remoteCommand: string) {
+export function sshArgs(config: CadenceBridgeConfig, remoteCommand: string) {
   const args: string[] = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
   if (config.sshKeyPath) args.push('-i', config.sshKeyPath);
   args.push(`${config.user}@${config.host}`, remoteCommand);
   return args;
 }
 
-function scpArgs(config: CadenceBridgeConfig, local: string, remote: string) {
+export function scpArgs(config: CadenceBridgeConfig, local: string, remote: string) {
   const args: string[] = ['-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
   if (config.sshKeyPath) args.push('-i', config.sshKeyPath);
   args.push(local, `${config.user}@${config.host}:${remote}`);
   return args;
 }
 
-function runProcess(file: string, args: string[], timeoutMs: number) {
+export function runProcess(file: string, args: string[], timeoutMs: number) {
   return new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }>((resolve) => {
     const child = spawn(file, args, { windowsHide: true });
     let stdout = '';

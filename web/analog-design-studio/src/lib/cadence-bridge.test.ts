@@ -32,6 +32,9 @@ const bridge: CadenceBridgeConfig = {
   display: ':0',
   library: 'BGR_ADI',
   timeoutMs: 5000,
+  spectreBin: '/usr/local/cadence/MMSIM141/tools.lnx86/spectre/bin/64bit/spectre',
+  spectreLdLibraryPath: '/usr/local/cadence/MMSIM141/tools.lnx86/lib/64bit',
+  spectreModel: '/home/cadence/Desktop/PDK_CRN65LP_v1.7a_Official_IC61_20120914_all/PDK_CRN65LP_v1.7a_Official_IC61_20120914/models/spectre/toplevel.scs',
 };
 
 describe('Phase 4 Cadence execution bridge', () => {

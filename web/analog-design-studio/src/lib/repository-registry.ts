@@ -8,6 +8,8 @@
  * describes and points at them.
  */
 
+import type { TopologySimulation } from './simulation/simulation-contract';
+
 export type GeneratorStatus = 'verified' | 'candidate' | 'unverified';
 export type GeneratorEntry = { id: string; label: string; path: string; status: GeneratorStatus; runbook?: string; invocation?: string; notes?: string };
 export type MosPolarity = 'NMOS' | 'PMOS';
@@ -42,6 +44,8 @@ export type Topology = {
   contract: TopologyContract;
   /** Diagram key rendered by the topology diagram component. */
   diagram: string;
+  /** Netlist-level simulation metadata consumed by the simulation engine. */
+  simulation?: TopologySimulation;
 };
 
 export type SpecDefinition = { key: string; label: string; enabled: boolean; target: number | null; unit: string; operator: string };
@@ -86,6 +90,27 @@ const fiveT: Topology = {
       { device: 'M5', type: 'NMOS', defaultSizing: { totalW: '6u', L: '480n', NF: 1, M: 1 } },
     ],
   },
+
+  simulation: {
+    profile: 'ota-ac-tran',
+    devices: [
+      { device: 'M1', d: 'MIRROR', g: 'VINP', s: 'TAIL', b: 'VSS' },
+      { device: 'M2', d: 'VOUT', g: 'VINN', s: 'TAIL', b: 'VSS' },
+      { device: 'M3', d: 'MIRROR', g: 'MIRROR', s: 'VDD', b: 'VDD' },
+      { device: 'M4', d: 'VOUT', g: 'MIRROR', s: 'VDD', b: 'VDD' },
+      { device: 'M5', d: 'TAIL', g: 'VBN_TAIL', s: 'VSS', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 1.5, role: 'supply' },
+      { name: 'V_VBN_TAIL', plus: 'VBN_TAIL', minus: 'VSS', dc: 0.6, role: 'bias' },
+      { name: 'V_VINP', plus: 'VINP', minus: 'VSS', dc: 0.75, role: 'input', input: { acMag: 1, pulse: { v0: 0.5, v1: 1.0, rise: '1n', width: '2u', period: '4u' } } },
+      { name: 'V_VINN', plus: 'VINN', minus: 'VSS', dc: 0.75, role: 'input', input: { acMag: 0 } },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'VOUT' },
+    load: { node: 'VOUT', c: '1p' },
+    tranStop: '4u',
+  },
 };
 
 const telescopic: Topology = {
@@ -115,6 +140,34 @@ const telescopic: Topology = {
       { device: 'M8', type: 'PMOS', defaultSizing: { totalW: '10u', L: '1u', NF: 1, M: 1 } },
       { device: 'M9', type: 'NMOS', defaultSizing: { totalW: '12u', L: '1u', NF: 1, M: 1 } },
     ],
+  },
+
+  simulation: {
+    profile: 'ota-ac-tran',
+    devices: [
+      { device: 'M1', d: 'NLEFT', g: 'VINP', s: 'TAIL', b: 'VSS' },
+      { device: 'M2', d: 'NRIGHT', g: 'VINN', s: 'TAIL', b: 'VSS' },
+      { device: 'M3', d: 'VOUTP', g: 'VBN_CAS', s: 'NLEFT', b: 'VSS' },
+      { device: 'M4', d: 'VOUTN', g: 'VBN_CAS', s: 'NRIGHT', b: 'VSS' },
+      { device: 'M5', d: 'VOUTP', g: 'VBP_CAS', s: 'PLEFT', b: 'VDD' },
+      { device: 'M6', d: 'VOUTN', g: 'VBP_CAS', s: 'PRIGHT', b: 'VDD' },
+      { device: 'M7', d: 'PLEFT', g: 'VBP_LOAD', s: 'VDD', b: 'VDD' },
+      { device: 'M8', d: 'PRIGHT', g: 'VBP_LOAD', s: 'VDD', b: 'VDD' },
+      { device: 'M9', d: 'TAIL', g: 'VBN_TAIL', s: 'VSS', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 2.0, role: 'supply' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+      { name: 'V_VBN_TAIL', plus: 'VBN_TAIL', minus: 'VSS', dc: 0.6, role: 'bias' },
+      { name: 'V_VBN_CAS', plus: 'VBN_CAS', minus: 'VSS', dc: 1.05, role: 'bias' },
+      { name: 'V_VBP_CAS', plus: 'VBP_CAS', minus: 'VSS', dc: 1.25, role: 'bias' },
+      { name: 'V_VBP_LOAD', plus: 'VBP_LOAD', minus: 'VSS', dc: 1.0, role: 'bias' },
+      { name: 'V_VINP', plus: 'VINP', minus: 'VSS', dc: 0.8, role: 'input', input: { acMag: 1, pulse: { v0: 0.6, v1: 1.0, rise: '1n', width: '2u', period: '4u' } } },
+      { name: 'V_VINN', plus: 'VINN', minus: 'VSS', dc: 0.8, role: 'input', input: { acMag: 0 } },
+    ],
+    nodes: { ground: 'VSS', out: 'VOUTP', outP: 'VOUTP', outN: 'VOUTN' },
+    load: { node: 'VOUTP', c: '1p' },
+    tranStop: '4u',
   },
 };
 
@@ -148,6 +201,37 @@ const folded: Topology = {
       { device: 'M11', type: 'NMOS', defaultSizing: { totalW: '8u', L: '1u', NF: 2, M: 1 } },
     ],
   },
+
+  simulation: {
+    profile: 'ota-ac-tran',
+    devices: [
+      { device: 'M1', d: 'NLEFT', g: 'VINP', s: 'TAIL', b: 'VSS' },
+      { device: 'M2', d: 'NRIGHT', g: 'VINN', s: 'TAIL', b: 'VSS' },
+      { device: 'M3', d: 'NLEFT', g: 'VBP2', s: 'VDD', b: 'VDD' },
+      { device: 'M4', d: 'NRIGHT', g: 'VBP2', s: 'VDD', b: 'VDD' },
+      { device: 'M5', d: 'FOLD_L', g: 'VBP1', s: 'NLEFT', b: 'VDD' },
+      { device: 'M6', d: 'VOUT', g: 'VBP1', s: 'NRIGHT', b: 'VDD' },
+      { device: 'M7', d: 'FOLD_L', g: 'VBN1', s: 'LEFT_SINK', b: 'VSS' },
+      { device: 'M8', d: 'VOUT', g: 'VBN1', s: 'RIGHT_SINK', b: 'VSS' },
+      { device: 'M9', d: 'LEFT_SINK', g: 'VBN2', s: 'VSS', b: 'VSS' },
+      { device: 'M10', d: 'RIGHT_SINK', g: 'VBN2', s: 'VSS', b: 'VSS' },
+      { device: 'M11', d: 'TAIL', g: 'VBN_TAIL', s: 'VSS', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 2.0, role: 'supply' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+      { name: 'V_VBP2', plus: 'VBP2', minus: 'VSS', dc: 1.55, role: 'bias' },
+      { name: 'V_VBP1', plus: 'VBP1', minus: 'VSS', dc: 1.3, role: 'bias' },
+      { name: 'V_VBN1', plus: 'VBN1', minus: 'VSS', dc: 0.65, role: 'bias' },
+      { name: 'V_VBN2', plus: 'VBN2', minus: 'VSS', dc: 0.45, role: 'bias' },
+      { name: 'V_VBN_TAIL', plus: 'VBN_TAIL', minus: 'VSS', dc: 0.65, role: 'bias' },
+      { name: 'V_VINP', plus: 'VINP', minus: 'VSS', dc: 1.0, role: 'input', input: { acMag: 1, pulse: { v0: 0.8, v1: 1.2, rise: '1n', width: '2u', period: '4u' } } },
+      { name: 'V_VINN', plus: 'VINN', minus: 'VSS', dc: 1.0, role: 'input', input: { acMag: 0 } },
+    ],
+    nodes: { ground: 'VSS', out: 'VOUT' },
+    load: { node: 'VOUT', c: '5p' },
+    tranStop: '4u',
+  },
 };
 
 const simpleCurrentMirror: Topology = {
@@ -170,6 +254,21 @@ const simpleCurrentMirror: Topology = {
       { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
       { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
     ],
+  },
+
+  simulation: {
+    profile: 'dc-mirror',
+    devices: [
+      { device: 'M1', d: 'IREF', g: 'IREF', s: 'VSS', b: 'VSS' },
+      { device: 'M2', d: 'IOUT', g: 'IREF', s: 'VSS', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_IREF', plus: 'IREF', minus: 'VSS', dc: 0.75, role: 'supply' },
+      { name: 'V_ILOAD', plus: 'IOUT', minus: 'VSS', dc: 0.9, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'IOUT', ref: 'IREF' },
+    deviceRoles: { ref: 'M1', out: 'M2' },
   },
 };
 
@@ -195,6 +294,26 @@ const differentialPair: Topology = {
       { device: 'M3', type: 'NMOS', defaultSizing: { totalW: '6u', L: '480n', NF: 1, M: 1 } },
     ],
   },
+
+  simulation: {
+    profile: 'dc-diffpair',
+    devices: [
+      { device: 'M1', d: 'VOUTP', g: 'VIP', s: 'TAIL', b: 'VSS' },
+      { device: 'M2', d: 'VOUTN', g: 'VIN', s: 'TAIL', b: 'VSS' },
+      { device: 'M3', d: 'TAIL', g: 'VBN_TAIL', s: 'VSS', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 1.5, role: 'supply' },
+      { name: 'V_VIP', plus: 'VIP', minus: 'VSS', dc: 0.75, role: 'supply' },
+      { name: 'V_VIN', plus: 'VIN', minus: 'VSS', dc: 0.75, role: 'supply' },
+      { name: 'V_VBN_TAIL', plus: 'VBN_TAIL', minus: 'VSS', dc: 0.6, role: 'bias' },
+      { name: 'V_LP', plus: 'VDD', minus: 'VOUTP', dc: 0, role: 'bias' },
+      { name: 'V_LN', plus: 'VDD', minus: 'VOUTN', dc: 0, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', outP: 'VOUTP', outN: 'VOUTN', tail: 'TAIL' },
+    deviceRoles: { tail: 'M3', inP: 'M1', inN: 'M2' },
+  },
 };
 
 const commonSource: Topology = {
@@ -217,6 +336,23 @@ const commonSource: Topology = {
       { device: 'M1', type: 'NMOS', defaultSizing: { totalW: '4u', L: '240n', NF: 1, M: 1 } },
       { device: 'M2', type: 'PMOS', placementProcedure: 'CCS_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
     ],
+  },
+
+  simulation: {
+    profile: 'ac-amplifier',
+    devices: [
+      { device: 'M1', d: 'VOUT', g: 'VIN', s: 'VSS', b: 'VSS' },
+      { device: 'M2', d: 'VOUT', g: 'VBP', s: 'VDD', b: 'VDD' },
+    ],
+    sources: [
+      { name: 'V_VIN', plus: 'VIN', minus: 'VSS', dc: 0.62, role: 'input', input: { acMag: 1, pulse: { v0: 0.54, v1: 0.7, rise: '1n', width: '2u', period: '4u' } } },
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 1.5, role: 'supply' },
+      { name: 'V_VBP', plus: 'VBP', minus: 'VSS', dc: 0.95, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'VOUT' },
+    load: { node: 'VOUT', c: '1p' },
+    tranStop: '4u',
   },
 };
 
@@ -241,6 +377,23 @@ const sourceFollower: Topology = {
       { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '6u', L: '480n', NF: 1, M: 1 } },
     ],
   },
+
+  simulation: {
+    profile: 'ac-amplifier',
+    devices: [
+      { device: 'M1', d: 'VDD', g: 'VIN', s: 'VOUT', b: 'VSS' },
+      { device: 'M2', d: 'VOUT', g: 'VBN', s: 'VSS', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_VIN', plus: 'VIN', minus: 'VSS', dc: 1.0, role: 'input', input: { acMag: 1, pulse: { v0: 0.8, v1: 1.2, rise: '1n', width: '2u', period: '4u' } } },
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 1.5, role: 'supply' },
+      { name: 'V_VBN', plus: 'VBN', minus: 'VSS', dc: 0.6, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'VOUT' },
+    load: { node: 'VOUT', c: '1p' },
+    tranStop: '4u',
+  },
 };
 
 const cascodeAmp: Topology = {
@@ -264,6 +417,25 @@ const cascodeAmp: Topology = {
       { device: 'M2', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
       { device: 'M3', type: 'PMOS', placementProcedure: 'CCA_PlacePMOSAuto', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
     ],
+  },
+
+  simulation: {
+    profile: 'ac-amplifier',
+    devices: [
+      { device: 'M1', d: 'NCAS', g: 'VIN', s: 'VSS', b: 'VSS' },
+      { device: 'M2', d: 'VOUT', g: 'VBN_CAS', s: 'NCAS', b: 'VSS' },
+      { device: 'M3', d: 'VOUT', g: 'VBP', s: 'VDD', b: 'VDD' },
+    ],
+    sources: [
+      { name: 'V_VIN', plus: 'VIN', minus: 'VSS', dc: 0.75, role: 'input', input: { acMag: 1, pulse: { v0: 0.5, v1: 1.0, rise: '1n', width: '2u', period: '4u' } } },
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 2.0, role: 'supply' },
+      { name: 'V_VBN_CAS', plus: 'VBN_CAS', minus: 'VSS', dc: 1.05, role: 'bias' },
+      { name: 'V_VBP', plus: 'VBP', minus: 'VSS', dc: 1.35, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'VOUT' },
+    load: { node: 'VOUT', c: '1p' },
+    tranStop: '4u',
   },
 };
 
@@ -290,6 +462,24 @@ const cascodeCurrentMirror: Topology = {
       { device: 'M4', type: 'NMOS', defaultSizing: { totalW: '4u', L: '480n', NF: 1, M: 1 } },
     ],
   },
+
+  simulation: {
+    profile: 'dc-mirror',
+    devices: [
+      { device: 'M1', d: 'NB', g: 'NB', s: 'VSS', b: 'VSS' },
+      { device: 'M2', d: 'NB2', g: 'NB', s: 'VSS', b: 'VSS' },
+      { device: 'M3', d: 'IREF', g: 'VBC', s: 'NB', b: 'VSS' },
+      { device: 'M4', d: 'IOUT', g: 'VBC', s: 'NB2', b: 'VSS' },
+    ],
+    sources: [
+      { name: 'V_VBC', plus: 'VBC', minus: 'VSS', dc: 0.9, role: 'bias' },
+      { name: 'V_IREF', plus: 'IREF', minus: 'VSS', dc: 1.2, role: 'supply' },
+      { name: 'V_ILOAD', plus: 'IOUT', minus: 'VSS', dc: 1.2, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'IOUT', ref: 'IREF' },
+    deviceRoles: { ref: 'M3', out: 'M4' },
+  },
 };
 
 const pmosCurrentMirror: Topology = {
@@ -312,6 +502,22 @@ const pmosCurrentMirror: Topology = {
       { device: 'M1', type: 'PMOS', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
       { device: 'M2', type: 'PMOS', defaultSizing: { totalW: '8u', L: '480n', NF: 1, M: 1 } },
     ],
+  },
+
+  simulation: {
+    profile: 'dc-mirror',
+    devices: [
+      { device: 'M1', d: 'IREF', g: 'IREF', s: 'VDD', b: 'VDD' },
+      { device: 'M2', d: 'IOUT', g: 'IREF', s: 'VDD', b: 'VDD' },
+    ],
+    sources: [
+      { name: 'V_VDD', plus: 'VDD', minus: 'VSS', dc: 1.5, role: 'supply' },
+      { name: 'V_IREF', plus: 'IREF', minus: 'VSS', dc: 0.8, role: 'supply' },
+      { name: 'V_ILOAD', plus: 'IOUT', minus: 'VSS', dc: 0.4, role: 'bias' },
+      { name: 'V_VSS', plus: 'VSS', minus: 'VSS', dc: 0, role: 'supply' },
+    ],
+    nodes: { ground: 'VSS', out: 'IOUT', ref: 'IREF' },
+    deviceRoles: { ref: 'M1', out: 'M2' },
   },
 };
 
