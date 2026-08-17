@@ -4,84 +4,323 @@
 
 :root {
   color-scheme: dark;
-  /* surfaces */
-  --bg-base: #080B10;
-  --bg-sidebar: #0A0E14;
-  --bg-panel: #0C1118;
-  --bg-panel-raised: #0D141D;
-  --bg-sunken: #090E14;
-  --bg-hover: #101620;
-  --bg-active: #121A25;
-  /* borders */
-  --border-subtle: #1C2430;
-  --border-default: #202A38;
-  --border-strong: #2A3A4E;
-  --border-accent: #3E5A78;
-  /* accent */
-  --accent: #7ABFFF;
-  --accent-bright: #8BD0FF;
-  --accent-bg: #17324A;
-  --accent-bg-hover: #1B3D5A;
-  --accent-border: #4C83B0;
-  --accent-input-border: #517FA8;
-  /* semantic */
-  --success: #5DE0A7;
-  --success-text: #6DD9A7;
-  --success-border: #255740;
-  --success-bg: #0C2119;
-  --candidate: #F0C778;
-  --candidate-border: #5A4520;
-  --candidate-bg: #211A0D;
-  --fail: #E78989;
-  --fail-border: #5A2A2A;
-  --fail-bg: #241214;
-  --warning: #D8B36B;
-  /* text */
-  --text-primary: #E7EDF7;
-  --text-secondary: #B8C4D2;
-  --text-tertiary: #7C8B9D;
-  --text-faint: #5E6D80;
-  --text-disabled: #4E5C6D;
-  /* typography */
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --text-page: 26px;
-  --text-section: 16px;
-  --text-card: 13px;
-  --text-body: 12px;
-  --text-small: 11px;
-  --text-meta: 10px;
-  --text-micro: 9px;
-  --text-code: 11px;
-  --text-stat: 22px;
-  /* radius */
-  --radius-pill: 5px;
-  --radius-control: 8px;
-  --radius-card: 11px;
-  --radius-panel: 14px;
-  /* shadows */
-  --shadow-resting: 0 1px 2px rgba(0, 0, 0, .35);
-  --shadow-hover: 0 6px 16px rgba(0, 0, 0, .45);
-  /* motion */
-  --ease: cubic-bezier(.2, 0, 0, 1);
-  --dur-hover: 150ms;
-  --dur-fade: 180ms;
+
+  /* Surfaces - Dark (Default) */
+  --bg-base: #07090e;
+  --bg-sidebar: #0a0d14;
+  --bg-panel: #0d121c;
+  --bg-panel-raised: #121824;
+  --bg-sunken: #05070a;
+  --bg-hover: #161f2e;
+  --bg-active: #1c273a;
+  --bg-card: #0e1420;
+  --bg-card-hover: #131b2b;
+
+  /* Borders & Dividers */
+  --border-subtle: #151d2a;
+  --border-default: #1e293b;
+  --border-strong: #2e3e56;
+  --border-accent: #38bdf840;
+
+  /* Brand / Accent - Precision Cyan / Electric Blue */
+  --accent: #38bdf8;
+  --accent-bright: #7dd3fc;
+  --accent-dim: #0284c7;
+  --accent-bg: #0c2338;
+  --accent-bg-hover: #10334f;
+  --accent-border: #0369a1;
+  --accent-glow: rgba(56, 189, 248, 0.15);
+
+  /* Semantic - Status */
+  --success: #34d399;
+  --success-text: #6ee7b7;
+  --success-border: #065f46;
+  --success-bg: #06241b;
+
+  --candidate: #fbbf24;
+  --candidate-text: #fde68a;
+  --candidate-border: #78350f;
+  --candidate-bg: #261b07;
+
+  --fail: #f87171;
+  --fail-text: #fca5a5;
+  --fail-border: #7f1d1d;
+  --fail-bg: #290f12;
+
+  --warning: #f59e0b;
+  --info: #60a5fa;
+
+  /* Circuit Schematic Specifics */
+  --sch-nmos: #38bdf8;
+  --sch-pmos: #f472b6;
+  --sch-gate: #e2e8f0;
+  --sch-wire: #94a3b8;
+  --sch-terminal: #94a3b8;
+  --sch-node: #f8fafc;
+  --sch-label: #cbd5e1;
+  --sch-sublabel: #64748b;
+  --sch-rail: #34d399;
+  --sch-bg-radial-start: #111a2e;
+  --sch-bg-radial-end: #07090e;
+
+  /* Typography */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-faint: #475569;
+  --text-disabled: #334155;
+  --text-inverse: #0f172a;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, Monaco, monospace;
+
+  /* Radius */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 28px -4px rgba(0, 0, 0, 0.6), 0 4px 8px -2px rgba(0, 0, 0, 0.4);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+
+  /* Transitions */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-normal: 200ms;
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; background: #080b10; color: #e7edf7; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-button, input, select { font: inherit; }
-button { cursor: pointer; }
-button:disabled { cursor: not-allowed; }
-.diagram { border: 1px solid #202a38; background: radial-gradient(circle at 50% 30%, #101827 0, #090d14 62%); border-radius: 14px; padding: 7px; margin-top: 12px; }
-.diagram svg { width: 100%; height: 205px; display: block; }
-.diagram .nmos { stroke: #67b7ff; stroke-width: 2.2; }
-.diagram .pmos { stroke: #f4a7ff; stroke-width: 2.2; }
-.diagram .gate { stroke: #dce6f5; stroke-width: 1.6; }
-.diagram .terminal, .diagram .wire { stroke: #8494a9; stroke-width: 1.4; fill: none; }
-.diagram .node { fill: #dce6f5; }
-.diagram .mosLabel { fill: #d6dfed; font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.diagram .netLabel, .diagram .supplyLabel { fill: #7e8da1; font-size: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.diagram .supply { stroke: #5de0a7; stroke-width: 1.4; }
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* Surfaces - Light (Crisp Engineering Laboratory) */
+  --bg-base: #f8fafc;
+  --bg-sidebar: #f1f5f9;
+  --bg-panel: #ffffff;
+  --bg-panel-raised: #f8fafc;
+  --bg-sunken: #eef2f6;
+  --bg-hover: #e2e8f0;
+  --bg-active: #cbd5e1;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8fafc;
+
+  /* Borders & Dividers */
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+  --border-accent: #0284c740;
+
+  /* Brand / Accent - Sharp Precision Blue */
+  --accent: #0284c7;
+  --accent-bright: #0369a1;
+  --accent-dim: #075985;
+  --accent-bg: #e0f2fe;
+  --accent-bg-hover: #bae6fd;
+  --accent-border: #7dd3fc;
+  --accent-glow: rgba(2, 132, 199, 0.12);
+
+  /* Semantic - Status */
+  --success: #059669;
+  --success-text: #047857;
+  --success-border: #a7f3d0;
+  --success-bg: #ecfdf5;
+
+  --candidate: #d97706;
+  --candidate-text: #b45309;
+  --candidate-border: #fde68a;
+  --candidate-bg: #fffbeb;
+
+  --fail: #dc2626;
+  --fail-text: #b91c1c;
+  --fail-border: #fecaca;
+  --fail-bg: #fef2f2;
+
+  --warning: #d97706;
+  --info: #2563eb;
+
+  /* Circuit Schematic Specifics */
+  --sch-nmos: #0284c7;
+  --sch-pmos: #db2777;
+  --sch-gate: #1e293b;
+  --sch-wire: #475569;
+  --sch-terminal: #334155;
+  --sch-node: #0f172a;
+  --sch-label: #1e293b;
+  --sch-sublabel: #64748b;
+  --sch-rail: #059669;
+  --sch-bg-radial-start: #ffffff;
+  --sch-bg-radial-end: #f1f5f9;
+
+  /* Typography */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-faint: #94a3b8;
+  --text-disabled: #cbd5e1;
+  --text-inverse: #f8fafc;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.12), 0 4px 8px -2px rgba(15, 23, 42, 0.06);
+  --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  min-height: 100vh;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography styles */
+code, pre, kbd, samp {
+  font-family: var(--font-mono);
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Focus visibility for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Global Schematic Diagram Styles */
+.diagram {
+  position: relative;
+  border: 1px solid var(--border-default);
+  background: radial-gradient(circle at 50% 30%, var(--sch-bg-radial-start) 0%, var(--sch-bg-radial-end) 75%);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  box-shadow: var(--shadow-inset);
+  transition: border-color var(--dur-normal) var(--ease), box-shadow var(--dur-normal) var(--ease);
+  overflow: hidden;
+}
+
+.diagram:hover {
+  border-color: var(--border-strong);
+}
+
+.diagram svg {
+  width: 100%;
+  height: 215px;
+  display: block;
+  user-select: none;
+}
+
+.diagram .nmos {
+  stroke: var(--sch-nmos);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.diagram .pmos {
+  stroke: var(--sch-pmos);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.diagram .gate {
+  stroke: var(--sch-gate);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.diagram .terminal,
+.diagram .wire {
+  stroke: var(--sch-wire);
+  stroke-width: 1.4;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram .node {
+  fill: var(--sch-node);
+  transition: fill 0.15s ease, r 0.15s ease;
+}
+
+.diagram .mosLabel {
+  fill: var(--sch-label);
+  font-size: 9.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.diagram .netLabel,
+.diagram .supplyLabel {
+  fill: var(--sch-sublabel);
+  font-size: 8.5px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+.diagram .supply {
+  stroke: var(--sch-rail);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
