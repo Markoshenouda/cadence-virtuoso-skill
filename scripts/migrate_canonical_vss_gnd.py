@@ -20,7 +20,7 @@ def wire_width(text, block, prefix):
         m = re.search(pattern, block)
         if m and m.group(1) == m.group(2):
             return m.group(1)
-    m = re.search(rf'(?m)\bsetq\s*\(\s*{re.escape(prefix)}_WIRE\s+([^\s\)]+)\s*\)', text)
+    m = re.search(rf'(?m)(?:\(\s*)?setq\s*\(?\s*{re.escape(prefix)}_WIRE\s+([^\s\)]+)', text)
     if m:
         return m.group(1)
     raise ValueError("cannot determine PLUS wire width")
