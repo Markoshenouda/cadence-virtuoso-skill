@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  FlaskConical,
 } from 'lucide-react';
 import { circuits, technologies } from '@/lib/repository-registry';
 import { BridgeStatus } from './bridge-status';
@@ -25,6 +26,7 @@ const navItems = [
   { href: '/', label: 'Dashboard', icon: Cpu, badge: null },
   { href: '/topologies', label: 'Topology Explorer', icon: Layers, badge: '44' },
   { href: '/new', label: 'Design Wizard', icon: Sparkles, badge: 'New' },
+  { href: '/simulation', label: 'Simulation Workspace', icon: FlaskConical, badge: 'Spectre' },
   { href: '/cadence', label: 'Cadence Bridge', icon: Terminal, badge: null },
 ];
 
@@ -32,6 +34,7 @@ const viewMeta: Record<string, { eyebrow: string; title: string }> = {
   '/': { eyebrow: 'SYSTEM / OVERVIEW', title: 'Analog IC Design Dashboard' },
   '/topologies': { eyebrow: 'LIBRARY / TOPOLOGIES', title: 'Analog Topology Explorer' },
   '/new': { eyebrow: 'STUDIO / CONFIGURATOR', title: 'Design & Sizing Wizard' },
+  '/simulation': { eyebrow: 'VERIFICATION / SPECTRE', title: 'Analog Simulation Workspace' },
   '/cadence': { eyebrow: 'BRIDGE / EXECUTION', title: 'Virtuoso & Spectre Bridge' },
 };
 
