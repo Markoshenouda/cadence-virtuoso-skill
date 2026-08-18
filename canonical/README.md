@@ -20,36 +20,31 @@ totalM = NF * M
 
 `wf` is the verified `tsmcN65 total_width(M)` field and is the authoritative TotalW field.
 
-## Mandatory VSS / VDC source contract
+## Mandatory VSS-source / VDC contract
 
-Every canonical generator that instantiates a supply or bias `analogLib/vdc` source must use the following schematic contract:
+For canonical generators that instantiate `analogLib/vdc`, the existing VDC behavior is preserved for every source except the dedicated VSS source:
 
 ```text
-VDC PLUS  -> existing wire + the source's normal net label
-VDC MINUS -> direct analogLib/gnd
+Normal VDC source:
+    VDC PLUS  -> existing wire + normal net label
+    VDC MINUS -> existing VSS wire + VSS net label
+
+Dedicated VSS source:
+    VDC PLUS  -> existing VSS wire + VSS net label
+    VDC MINUS -> direct analogLib/gnd
 ```
 
-The `MINUS` side must **not** create a wire and must **not** create a `VSS` wire label. The `VDC` instance itself remains present; only its `MINUS` termination changes from the old VSS wire to `analogLib/gnd`.
+The migration is therefore **VSS-source-only**. It must not replace the MINUS termination of bias, input, supply, or other non-VSS VDC sources with `analogLib/gnd`.
 
-Each generated `analogLib/gnd` instance must have a unique instance name, preferably derived from the VDC source name, e.g.:
+The VSS source keeps its `analogLib/vdc` instance. Only its `MINUS` termination changes from the legacy VSS wire to a direct `analogLib/gnd` instance. The generated GND instance must have a unique name derived from the VDC source name, for example:
 
 ```skill
 strcat(name "_GND")
 ```
 
-For a VSS source the resulting schematic is therefore:
+The generator contract is explicit: `CreateVDC` receives the requested MINUS behavior, and the VSS call selects `GND`; every other VDC call selects the legacy `VSS` wire/label behavior.
 
-```text
-        VSS
-         |
-        VDC
-         |
-        GND
-```
-
-This VSS/GND contract is a canonical generator requirement and must be preserved in future generators, skills, runbooks, and generator tests.
-
-The repository CI migration/validation workflow also checks this contract across canonical VDC generators before accepting the migration commit.
+The branch validation workflow checks this distinction across canonical VDC generators before accepting the migration commit.
 
 | Family | Canonical artifact | Status |
 |---|---|---|
