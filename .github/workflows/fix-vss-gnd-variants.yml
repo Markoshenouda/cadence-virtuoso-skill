@@ -1,0 +1,160 @@
+name: Fix canonical VSS variants
+
+on:
+  push:
+    branches: [vss-gnd-bulk-update]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: "!contains(github.event.head_commit.message, '[skip vss-gnd]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix VDC variants conservatively
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          ROOT = Path('canonical')
+          changed = []
+          skipped = []
+
+          def fix_file(path):
+              text = path.read_text(encoding='utf-8')
+              original = text
+              matches = list(re.finditer(r'procedure\\((\\w+)_CreateVDC\\(([^)]*)\\)', text))
+              if not matches:
+                  return None
+
+              for match in reversed(matches):
+                  prefix = match.group(1)
+                  args = match.group(2)
+                  start = match.start()
+                  next_proc = text.find('\\nprocedure(', match.end())
+                  end = len(text) if next_proc < 0 else next_proc
+                  block = text[start:end]
+
+                  if 'wm=schCreateWire' not in block or '"VSS"' not in block:
+                      continue
+
+                  stub_match = re.search(r'wp=schCreateWire\\(cv "route" "full" list\\(plus ep\\) (\\w+) \\1 0\\)', block)
+                  if not stub_match:
+                      skipped.append(f'{path}: {prefix}: could not identify PLUS wire constant')
+                      continue
+                  wire = stub_match.group(1)
+
+                  sig_args = args.strip()
+                  if sig_args == 'cv master name xy value plusNet minusNet':
+                      new_args = 'cv master gndMaster name xy value plusNet'
+                  elif sig_args == 'cv master name xy value plusNet':
+                      new_args = 'cv master gndMaster name xy value plusNet'
+                  else:
+                      skipped.append(f'{path}: {prefix}: unsupported signature {sig_args}')
+                      continue
+
+                  new_block = block
+                  new_block = new_block.replace(
+                      f'procedure({prefix}_CreateVDC({args})',
+                      f'procedure({prefix}_CreateVDC({new_args})', 1)
+                  )
+
+                  body_re = re.compile(r'let\\(\\([^\\n]*\\)\\n.*?\\n\\s+inst\\n\\s+\\)\\n\\)', re.S)
+                  body_match = body_re.search(new_block)
+                  if not body_match:
+                      skipped.append(f'{path}: {prefix}: unsupported VDC body')
+                      continue
+
+                  new_body = f'''let((inst gnd plus minus ep wp)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{prefix}: cannot create VDC %s.\\n" name))\n        {prefix}_SetVDC(inst value)\n        plus={prefix}_VDCPinCenter(inst "PLUS")\n        minus={prefix}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{prefix}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {wire} {wire} 0)\n        unless(wp error("{prefix}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {wire} nil)\n        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n        unless(gnd error("{prefix}: cannot create GND for VDC %s.\\n" name))\n        printf("{prefix}: VDC %s = %sV PLUS=%s MINUS=GND\\n" name value plusNet)\n        inst\n    )\n)'''
+                  new_block = new_block[:body_match.start()] + new_body + new_block[body_match.end():]
+                  text = text[:start] + new_block + text[end:]
+
+              if text == original:
+                  return None
+
+              if 'gndMaster=' not in text:
+                  lm = re.search(r'(?m)^(\\s*)vdcMaster=([^\\n]+)$', text)
+                  if not lm:
+                      skipped.append(f'{path}: no vdcMaster binding')
+                      return None
+                  indent = lm.group(1)
+                  text = text[:lm.end()] + f'\\n{indent}gndMaster={lm.group(2).replace(chr(34)+"vdc"+chr(34), chr(34)+"gnd"+chr(34))}' + text[lm.end():]
+
+              # The previous line above intentionally mirrors the vdc master opener.
+              # Normalize only if it produced the wrong cell name.
+              text = re.sub(r'(?m)^([ \\t]*)gndMaster=([^\\n]+)$', lambda m: m.group(0).replace('"vdc"', '"gnd"'), text)
+
+              # Add gndMaster to the enclosing let variable list when needed.
+              if re.search(r'let\\(\\([^\\n]*vdcMaster[^\\n]*\\)\\n', text) and not re.search(r'let\\(\\([^\\n]*gndMaster[^\\n]*\\)\\n', text):
+                  text = re.sub(r'(let\\(\\([^\\n]*?)\\bvdcMaster\\b)', r'\\1 gndMaster', text, count=1)
+
+              for m in re.finditer(rf'(?m)^(\\s*){re.escape(matches[0].group(1))}_CreateVDC\\(cv vdcMaster ([^\\n]*)\\)$', text):
+                  if 'gndMaster' not in m.group(2):
+                      replacement = f'{m.group(1)}{matches[0].group(1)}_CreateVDC(cv vdcMaster gndMaster {m.group(2)})'
+                      text = text[:m.start()] + replacement + text[m.end():]
+
+              path.write_text(text, encoding='utf-8')
+              return path
+
+          for path in sorted(ROOT.rglob('*.il')):
+              result = fix_file(path)
+              if result:
+                  changed.append(str(result))
+
+          print('FIXED:')
+          for p in changed:
+              print('  ' + p)
+          print('SKIPPED:')
+          for p in skipped:
+              print('  ' + p)
+
+      - name: Validate canonical VSS/GND contract
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          failures=[]
+          checked=0
+          for path in sorted(Path('canonical').rglob('*.il')):
+              text=path.read_text(encoding='utf-8')
+              matches=list(re.finditer(r'procedure\\((\\w+)_CreateVDC\\(([^)]*)\\)', text))
+              if not matches:
+                  continue
+              checked += 1
+              if 'gndMaster=' not in text:
+                  failures.append(f'{path}: missing gndMaster')
+              for m in matches:
+                  prefix=m.group(1)
+                  next_proc=text.find('\\nprocedure(',m.end())
+                  block=text[m.start():len(text) if next_proc<0 else next_proc]
+                  if 'cv master gndMaster name xy value plusNet' not in block:
+                      failures.append(f'{path}: {prefix}: legacy/unsupported signature')
+                  if 'strcat(name "_GND")' not in block:
+                      failures.append(f'{path}: {prefix}: unique GND naming missing')
+                  if 'wm=schCreateWire' in block or 'minusNet' in block or 'car(wm)' in block:
+                      failures.append(f'{path}: {prefix}: MINUS wire/label remains')
+                  if 'list(plus ep)' not in block:
+                      failures.append(f'{path}: {prefix}: PLUS wire missing')
+          print(f'Checked {checked} canonical VDC generators')
+          if failures:
+              print('FAILURES:')
+              print('\\n'.join(failures))
+              raise SystemExit(1)
+          print('Canonical VSS/GND validation: PASS')
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add canonical
+          if git diff --cached --quiet; then
+            echo "No additional canonical changes."
+            exit 0
+          fi
+          git commit -m "Fix remaining canonical VSS GND variants [skip vss-gnd]"
+          git push
