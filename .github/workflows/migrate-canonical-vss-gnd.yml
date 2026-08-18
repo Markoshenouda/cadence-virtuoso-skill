@@ -12,132 +12,17 @@ permissions:
 
 jobs:
   normalize:
-    if: "github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip vss-gnd]') || github.event_name == 'pull_request'"
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout branch head
+        uses: actions/checkout@v4
         with:
-          ref: vss-gnd-bulk-update
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 0
 
-      - name: Normalize only VSS-source VDC MINUS terminals
-        shell: python
-        run: |
-          from pathlib import Path
-          import re
-
-          root = Path("canonical")
-          changed = []
-
-          def migrate_block(path, block, prefix):
-              if f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)" not in block:
-                  return block, False
-
-              wire_m = re.search(
-                  r'wp=schCreateWire\(cv "route" "full" list\(plus ep\) ([A-Za-z0-9_]+) \\1 0\)',
-                  block,
-              )
-              if not wire_m:
-                  raise SystemExit(f"{path}: {prefix}: cannot determine PLUS wire width")
-              wire = wire_m.group(1)
-
-              start = block.find("let((", block.find(f"procedure({prefix}_CreateVDC"))
-              if start < 0:
-                  raise SystemExit(f"{path}: {prefix}: cannot find CreateVDC body")
-
-              body = f'''let((inst gnd plus minus ep em wp wm)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{prefix}: cannot create VDC %s.\\n" name))\n        {prefix}_SetVDC(inst value)\n        plus={prefix}_VDCPinCenter(inst "PLUS")\n        minus={prefix}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{prefix}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {wire} {wire} 0)\n        unless(wp error("{prefix}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {wire} nil)\n        if(equal(minusNet "GND") then\n            gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n            unless(gnd error("{prefix}: cannot create GND for VDC %s.\\n" name))\n            else\n            em=list(car(minus) cadr(minus)-{prefix}_STUB)\n            wm=schCreateWire(cv "route" "full" list(minus em) {wire} {wire} 0)\n            unless(wm error("{prefix}: VDC MINUS wiring failed for %s.\\n" name))\n            schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" {wire} nil)\n        )\n        printf("{prefix}: VDC %s = %sV PLUS=%s MINUS=%s\\n" name value plusNet minusNet)\n        inst\n    )\n)'''
-
-              block = block[:start] + body
-              block = block.replace(
-                  f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)",
-                  f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)",
-                  1,
-              )
-              return block, True
-
-          for path in sorted(root.rglob("*.il")):
-              text = path.read_text(encoding="utf-8")
-              original = text
-              matches = list(re.finditer(r'procedure\((\w+)_CreateVDC\(', text))
-              for match in reversed(matches):
-                  prefix = match.group(1)
-                  next_proc = text.find("\nprocedure(", match.end())
-                  end = len(text) if next_proc < 0 else next_proc
-                  block = text[match.start():end]
-                  new_block, did = migrate_block(path, block, prefix)
-                  if did:
-                      text = text[:match.start()] + new_block + text[end:]
-
-              def call_repl(m):
-                  prefix = m.group(1)
-                  args = m.group(2).strip()
-                  if args.endswith('"GND"') or args.endswith('"VSS"'):
-                      return m.group(0)
-                  net_match = re.search(r'"([^"]+)"\s*$', args)
-                  if not net_match:
-                      raise SystemExit(f"{path}: {prefix}: cannot identify VDC PLUS net")
-                  plus_net = net_match.group(1)
-                  minus = "GND" if plus_net == "VSS" else "VSS"
-                  return f'{prefix}_CreateVDC(cv vdcMaster gndMaster {args} "{minus}")'
-
-              text = re.sub(
-                  r'(?m)^\s*(\w+)_CreateVDC\(cv vdcMaster ([^\n]*)\)$',
-                  call_repl,
-                  text,
-              )
-
-              if text != original:
-                  path.write_text(text, encoding="utf-8")
-                  changed.append(str(path))
-
-          print("NORMALIZED:")
-          for item in changed:
-              print("  " + item)
-
-      - name: Validate VSS-only contract
-        shell: python
-        run: |
-          from pathlib import Path
-          import re
-
-          failures = []
-          checked = 0
-          for path in sorted(Path("canonical").rglob("*.il")):
-              text = path.read_text(encoding="utf-8")
-              matches = list(re.finditer(r'procedure\((\w+)_CreateVDC\(', text))
-              if not matches:
-                  continue
-              checked += 1
-              for match in matches:
-                  prefix = match.group(1)
-                  next_proc = text.find("\nprocedure(", match.end())
-                  block = text[match.start(): len(text) if next_proc < 0 else next_proc]
-                  if f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)" not in block:
-                      failures.append(f"{path}: {prefix}: CreateVDC signature is not explicit about MINUS")
-                  if 'if(equal(minusNet "GND") then' not in block:
-                      failures.append(f"{path}: {prefix}: missing VSS-only GND branch")
-                  if 'wm=schCreateWire' not in block or 'minusNet' not in block:
-                      failures.append(f"{path}: {prefix}: non-VSS MINUS wiring is missing")
-                  if 'strcat(name "_GND")' not in block:
-                      failures.append(f"{path}: {prefix}: unique GND naming missing")
-
-              for call in re.finditer(r'(?m)^\s*(\w+)_CreateVDC\(cv vdcMaster gndMaster ([^\n]*)\)$', text):
-                  args = call.group(2).strip()
-                  net_match = re.search(r'"([^"]+)"\s+"([^"]+)"$', args)
-                  if not net_match:
-                      failures.append(f"{path}: malformed explicit VDC MINUS contract")
-                      continue
-                  plus_net, minus_net = net_match.groups()
-                  expected = "GND" if plus_net == "VSS" else "VSS"
-                  if minus_net != expected:
-                      failures.append(f"{path}: PLUS={plus_net} must use MINUS={expected}, found {minus_net}")
-
-          print(f"Checked {checked} canonical VDC generator files")
-          if failures:
-              print("VALIDATION FAILURES:")
-              for failure in failures:
-                  print("  " + failure)
-              raise SystemExit(1)
-          print("Canonical VSS-only validation: PASS")
+      - name: Normalize and validate canonical VDC generators
+        run: python scripts/migrate_canonical_vss_gnd.py
 
       - name: Commit normalization from push event
         if: github.event_name == 'push'
@@ -147,8 +32,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add canonical
           if git diff --cached --quiet; then
-            echo "No canonical normalization changes were required."
+            echo "No canonical normalization changes required."
             exit 0
           fi
-          git commit -m "Restrict analogLib GND termination to VSS sources [skip vss-gnd]"
+          git commit -m "Apply VSS-only VDC termination contract [skip vss-gnd]"
           git push
