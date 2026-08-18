@@ -1,63 +1,234 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock, LayoutDashboard, Network, Sparkles, Terminal } from 'lucide-react';
+import {
+  Cpu,
+  Layers,
+  Sparkles,
+  Terminal,
+  Activity,
+  GitFork,
+  ExternalLink,
+  ShieldCheck,
+  ChevronRight,
+  Menu,
+  X,
+} from 'lucide-react';
 import { circuits, technologies } from '@/lib/repository-registry';
 import { BridgeStatus } from './bridge-status';
+import { ThemeToggle } from './theme-toggle';
 import styles from './shell.module.css';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/topologies', label: 'Topologies', icon: Network },
-  { href: '/new', label: 'New Design', icon: Sparkles },
-  { href: '/cadence', label: 'Cadence Bridge', icon: Terminal },
+  { href: '/', label: 'Dashboard', icon: Cpu, badge: null },
+  { href: '/topologies', label: 'Topology Explorer', icon: Layers, badge: '44' },
+  { href: '/new', label: 'Design Wizard', icon: Sparkles, badge: 'New' },
+  { href: '/cadence', label: 'Cadence Bridge', icon: Terminal, badge: null },
 ];
 
-const views = [
-  { prefix: '/', eyebrow: 'ANALOG IC DESIGN / WORKSPACE', name: 'Dashboard' },
-  { prefix: '/topologies', eyebrow: 'LIBRARY / TOPOLOGIES', name: 'Topology Explorer' },
-  { prefix: '/new', eyebrow: 'DESIGN WORKSPACE / NEW DESIGN', name: 'Design Wizard' },
-  { prefix: '/cadence', eyebrow: 'EXECUTION / BRIDGE', name: 'Cadence Bridge' },
-];
+const viewMeta: Record<string, { eyebrow: string; title: string }> = {
+  '/': { eyebrow: 'SYSTEM / OVERVIEW', title: 'Analog IC Design Dashboard' },
+  '/topologies': { eyebrow: 'LIBRARY / TOPOLOGIES', title: 'Analog Topology Explorer' },
+  '/new': { eyebrow: 'STUDIO / CONFIGURATOR', title: 'Design & Sizing Wizard' },
+  '/cadence': { eyebrow: 'BRIDGE / EXECUTION', title: 'Virtuoso & Spectre Bridge' },
+};
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
-  const view = views.find((v) => (v.prefix === '/' ? pathname === '/' : pathname.startsWith(v.prefix))) ?? { eyebrow: 'WORKSPACE', name: 'Analog Design Studio' };
-  const available = circuits.filter((c) => c.status === 'available');
-  const comingSoon = circuits.filter((c) => c.status === 'coming-soon');
-  const topologyCount = circuits.reduce((count, c) => count + c.topologies.length, 0);
-  const generators = circuits.flatMap((c) => c.topologies.map((t) => t.generator));
-  const verifiedCount = generators.filter((g) => g.status === 'verified').length;
-  const technology = technologies[0]?.name ?? '—';
-  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  return <div className={styles.shell}>
-    <aside className={styles.sidebar}>
-      <div className={styles.brand}><div className={styles.brandLogo}>A</div><div className={styles.brandText}><strong>Analog Design Studio</strong><span>Repository-backed workspace</span></div></div>
-      <nav className={styles.navGroup}>
-        {navItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} title={label} className={`${styles.navItem} ${isActive(href) ? styles.navActive : ''}`}><Icon size={16}/><span>{label}</span></Link>)}
-      </nav>
-      <div className={styles.navDivider}/>
-      <div className={styles.soonHead}>COMING SOON</div>
-      <div className={styles.navGroup}>
-        {comingSoon.map((c) => <button key={c.id} className={styles.soonItem} disabled title="Planned in the repository roadmap"><Clock size={15}/><span>{c.name}</span></button>)}
+  // Derive current view info
+  const currentKey = Object.keys(viewMeta).find((k) =>
+    k === '/' ? pathname === '/' : pathname.startsWith(k)
+  ) || '/';
+  const currentView = viewMeta[currentKey] || {
+    eyebrow: 'ENGINEERING WORKSPACE',
+    title: 'Analog Design Studio',
+  };
+
+  // Real registry data
+  const availableCircuits = circuits.filter((c) => c.status === 'available');
+  const comingSoonCircuits = circuits.filter((c) => c.status === 'coming-soon');
+  const totalTopologies = circuits.reduce((acc, c) => acc + c.topologies.length, 0);
+  const allGenerators = circuits.flatMap((c) => c.topologies.map((t) => t.generator));
+  const verifiedCount = allGenerators.filter((g) => g.status === 'verified').length;
+  const activeTech = technologies[0]?.name ?? 'tsmcN65';
+
+  const isNavActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
+
+  return (
+    <div className={styles.shellContainer}>
+      {/* Mobile Top Bar */}
+      <div className={styles.mobileBar}>
+        <button
+          type="button"
+          className={styles.mobileMenuBtn}
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label="Toggle navigation menu"
+        >
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+        <div className={styles.mobileBrand}>
+          <div className={styles.brandEmblem}>
+            <Cpu size={16} />
+          </div>
+          <span className={styles.mobileBrandText}>Analog Design Studio</span>
+        </div>
+        <ThemeToggle />
       </div>
-      <div className={styles.sidebarBottom}>
-        <div className={styles.repoCard}>REPOSITORY<b>cadence-virtuoso-skill</b><small>source of truth</small></div>
+
+      {/* Sidebar Overlay for Mobile */}
+      {mobileOpen && (
+        <div
+          className={styles.overlay}
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`${styles.sidebar} ${mobileOpen ? styles.sidebarOpen : ''}`}
+        aria-label="Primary Navigation"
+      >
+        {/* Brand */}
+        <div className={styles.brandSection}>
+          <Link href="/" className={styles.brandLink} onClick={() => setMobileOpen(false)}>
+            <div className={styles.brandEmblem}>
+              <Cpu size={18} className={styles.brandIcon} />
+            </div>
+            <div className={styles.brandMeta}>
+              <span className={styles.brandName}>ANALOG DESIGN STUDIO</span>
+              <span className={styles.brandSub}>Cadence Virtuoso IC6.1.7</span>
+            </div>
+          </Link>
+        </div>
+
+        {/* Navigation items */}
+        <div className={styles.navSection}>
+          <div className={styles.navHeader}>WORKSPACE NAVIGATION</div>
+          <nav className={styles.navList}>
+            {navItems.map(({ href, label, icon: Icon, badge }) => {
+              const active = isNavActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`${styles.navItem} ${active ? styles.navItemActive : ''}`}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Icon size={16} className={styles.navIcon} />
+                  <span className={styles.navLabel}>{label}</span>
+                  {badge && href === '/topologies' ? (
+                    <span className={styles.navBadge}>{totalTopologies}</span>
+                  ) : badge ? (
+                    <span className={`${styles.navBadge} ${styles.navBadgeNew}`}>{badge}</span>
+                  ) : null}
+                  {active && <span className={styles.activePillIndicator} />}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Circuit Family Explorer Quick Links */}
+        <div className={styles.familyNavSection}>
+          <div className={styles.navHeader}>
+            <span>CIRCUIT FAMILIES</span>
+            <span className={styles.familyHeaderCount}>{availableCircuits.length}</span>
+          </div>
+          <div className={styles.familyList}>
+            {availableCircuits.map((fam) => (
+              <Link
+                key={fam.id}
+                href={`/topologies?family=${fam.id}`}
+                className={styles.familyItem}
+                onClick={() => setMobileOpen(false)}
+              >
+                <div className={styles.familyDot} />
+                <span className={styles.familyName}>{fam.name}</span>
+                <span className={styles.familyCount}>{fam.topologies.length}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Sidebar Footer telemetry */}
+        <div className={styles.sidebarFooter}>
+          <div className={styles.repoCard}>
+            <div className={styles.repoCardHead}>
+              <GitFork size={12} />
+              <span>REPOSITORY</span>
+            </div>
+            <div className={styles.repoName}>cadence-virtuoso-skill</div>
+            <div className={styles.repoDetails}>
+              <span>PDK: {activeTech}</span>
+              <span className={styles.repoDivider}>•</span>
+              <span>{verifiedCount}/{allGenerators.length} Verified</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className={styles.mainWrapper}>
+        {/* Global Topbar */}
+        <header className={styles.topbar}>
+          <div className={styles.topbarLeft}>
+            <div className={styles.breadcrumb}>
+              <span className={styles.eyebrow}>{currentView.eyebrow}</span>
+              <ChevronRight size={12} className={styles.breadcrumbSep} />
+              <span className={styles.currentTitle}>{currentView.title}</span>
+            </div>
+          </div>
+
+          <div className={styles.topbarRight}>
+            <BridgeStatus />
+            <div className={styles.divider} />
+            <ThemeToggle />
+          </div>
+        </header>
+
+        {/* Dynamic Page Content */}
+        <main className={styles.mainContent}>{children}</main>
+
+        {/* Professional Engineering Status Bar */}
+        <footer className={styles.statusbar}>
+          <div className={styles.statusLeft}>
+            <div className={styles.statusItem}>
+              <span className={styles.statusIndicatorOnline} />
+              <span>REGISTRY READY</span>
+            </div>
+            <span className={styles.statusSep}>|</span>
+            <span className={styles.statusData}>
+              <b>{totalTopologies}</b> TOPOLOGIES
+            </span>
+            <span className={styles.statusSep}>•</span>
+            <span className={styles.statusData}>
+              <b>{availableCircuits.length}</b> ACTIVE FAMILIES
+            </span>
+            <span className={styles.statusSep}>•</span>
+            <span className={styles.statusData}>
+              <b>{comingSoonCircuits.length}</b> ROADMAP
+            </span>
+          </div>
+
+          <div className={styles.statusRight}>
+            <span className={styles.statusData}>
+              TECHNOLOGY: <b>{activeTech}</b> (TSMC 65nm GP)
+            </span>
+            <span className={styles.statusSep}>|</span>
+            <span className={styles.statusData}>
+              GENERATORS: <b>{verifiedCount}</b>/<b>{allGenerators.length}</b> VERIFIED
+            </span>
+            <span className={styles.statusSep}>|</span>
+            <span className={styles.versionTag}>EDA v0.1.0</span>
+          </div>
+        </footer>
       </div>
-    </aside>
-    <div className={styles.main}>
-      <header className={styles.topbar}>
-        <div className={styles.topbarLeft}><span className={styles.topbarEyebrow}>{view.eyebrow}</span><span className={styles.topbarDivider}>/</span><span className={styles.topbarView}>{view.name}</span></div>
-        <BridgeStatus/>
-      </header>
-      <main className={styles.content}>{children}</main>
-      <footer className={styles.statusbar}>
-        <div className={styles.statusLeft}><span>{topologyCount} TOPOLOGIES · {circuits.length} CIRCUIT FAMILIES · {comingSoon.length} COMING SOON</span></div>
-        <div><span>TECHNOLOGY <b>{technology}</b></span><span className={styles.statusGen}>GENERATORS <b>{verifiedCount}</b> VERIFIED / <b>{generators.length}</b> REGISTERED</span></div>
-        <div><span>v0.1.0</span><span>REGISTRY-DRIVEN</span></div>
-      </footer>
     </div>
-  </div>;
+  );
 }

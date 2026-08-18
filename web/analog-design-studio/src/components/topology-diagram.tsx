@@ -1874,7 +1874,7 @@ export function hasDiagram(key: string): boolean {
   return diagramKeys.includes(key);
 }
 
-export function TopologyDiagram({ diagram }: { diagram: string }) {
+export function TopologyDiagram({ diagram, className = '' }: { diagram: string; className?: string }) {
   const isWide = wideDiagrams.has(diagram);
   const vb = isWide ? '0 0 320 286' : '0 0 222 286';
   const fallbackX = isWide ? 160 : 111;
@@ -1891,7 +1891,7 @@ export function TopologyDiagram({ diagram }: { diagram: string }) {
     </g>
   );
   return (
-    <div className="diagram">
+    <div className={`diagram ${className}`}>
       <svg viewBox={vb} role="img" aria-label={`Topology schematic: ${diagram}`}>
         {body}
       </svg>
