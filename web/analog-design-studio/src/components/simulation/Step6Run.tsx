@@ -65,7 +65,7 @@ export function Step6Run({ session, onRunSimulation, onCancelSimulation, onViewR
         </p>
       </div>
 
-      {bridgeEnabled === false && (
+      {isDisabled && (
         <div style={{ marginBottom: '20px' }}>
           <BridgeOfflineState
             onTogglePreview={() => setShowDryRun(!showDryRun)}
@@ -76,7 +76,7 @@ export function Step6Run({ session, onRunSimulation, onCancelSimulation, onViewR
         </div>
       )}
 
-      {bridgeEnabled !== false && (
+      {!isDisabled && (
         <div className={styles.configCard}>
           <div className={styles.configCardTitle}>
             <Terminal size={14} />

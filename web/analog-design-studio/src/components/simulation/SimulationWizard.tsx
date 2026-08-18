@@ -106,7 +106,16 @@ export function SimulationWizard({ sessionId }: SimulationWizardProps) {
         body: JSON.stringify({ config: session.design.designConfig, dryRun: false }),
       });
       const resultData = await res.json();
-      session.execution.status = resultData.ok ? 'COMPLETED' : 'FAILED';
+      if (resultData.ok) {
+        session.execution.status = 'COMPLETED';
+        session.execution.error = null;
+      } else if (resultData.status === 'disabled' || res.status === 409) {
+        session.execution.status = 'DISABLED';
+        session.execution.error = resultData.message || 'Cadence Bridge is disabled. Enable CADENCE_BRIDGE_ENABLED=true or preview setup in Dry-Run mode.';
+      } else {
+        session.execution.status = 'FAILED';
+        session.execution.error = resultData.message || (resultData.notes && resultData.notes.join(' ')) || resultData.stderr || 'Simulation failed.';
+      }
       session.results = resultData;
       SimulationSessionStore.saveSession(session);
       setSession({ ...session });
