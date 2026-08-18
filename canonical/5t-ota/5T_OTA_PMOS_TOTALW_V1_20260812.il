@@ -2,21 +2,16 @@
 ; 5T OTA PMOS + VDC RULE TEST — TOTALW V1
 ; Cadence Virtuoso IC6.1.7 / tsmcN65
 ;
-; Current sizing contract:
-;   TotalW -> wf
-;   L      -> l
-;   NF     -> fingers + nf
-;   M      -> simM + m
-;   W      -> explicit per-finger implementation width
-;
-; For this validated test all devices use NF=1, M=1, so W/finger=TotalW.
+; VSS SOURCE CONTRACT:
+;   VDC PLUS  -> existing wire + net label
+;   VDC MINUS -> direct analogLib/gnd, no wire, no VSS label
 ;==============================================================================
 
 setq(T5TW_LIB "tsmcN65")
 setq(T5TW_NCH "nch")
 (setq T5TW_PCH "pch")
-setq(T5TW_STUB 0.75)
-setq(T5TW_W 0.0625)
+(setq T5TW_STUB 0.75)
+(setq T5TW_W 0.0625)
 
 procedure(T5TW_SetMOS(inst TotalW W L NF M)
     let((cdf)
@@ -29,8 +24,6 @@ procedure(T5TW_SetMOS(inst TotalW W L NF M)
         unless(cdf->simM error("T5TW: missing simM.\n"))
         unless(cdf->nf error("T5TW: missing nf.\n"))
         unless(cdf->m error("T5TW: missing m.\n"))
-
-        ; Explicit complete sizing assignment.
         cdf->w->value=W
         cdf->l->value=L
         cdf->wf->value=TotalW
@@ -38,17 +31,13 @@ procedure(T5TW_SetMOS(inst TotalW W L NF M)
         cdf->simM->value=M
         cdf->nf->value=NF
         cdf->m->value=M
-
         printf("T5TW: %s TotalW=%s W/finger=%s L=%s NF=%s M=%s wf=%s fingers=%s simM=%s nf=%s m=%s\n"
             inst~>name TotalW W L NF M cdf->wf->value
             cdf->fingers->value cdf->simM->value cdf->nf->value cdf->m->value)
-
         unless(equal(cdf->wf->value TotalW)
-            error("T5TW: TotalW/wf mismatch on %s.\n" inst~>name)
-        )
+            error("T5TW: TotalW/wf mismatch on %s.\n" inst~>name))
         unless(equal(cdf->l->value L)
-            error("T5TW: L mismatch on %s.\n" inst~>name)
-        )
+            error("T5TW: L mismatch on %s.\n" inst~>name))
         t
     )
 )
@@ -165,21 +154,19 @@ procedure(T5TW_VPin(inst name)
     )
 )
 
-procedure(T5TW_VDC(cv master name xy netName value)
-    let((inst plus minus ep em wp wm)
+procedure(T5TW_VDC(cv master gndMaster name xy netName value)
+    let((inst plus minus ep wp gnd)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("T5TW: cannot create %s.\n" name))
         T5TW_SetVDC(inst value)
         plus=T5TW_VPin(inst "PLUS")
         minus=T5TW_VPin(inst "MINUS")
         ep=list(car(plus) cadr(plus)+T5TW_STUB)
-        em=list(car(minus) cadr(minus)-T5TW_STUB)
         wp=schCreateWire(cv "route" "full" list(plus ep) T5TW_W T5TW_W 0)
-        wm=schCreateWire(cv "route" "full" list(minus em) T5TW_W T5TW_W 0)
         unless(wp error("T5TW: PLUS wire failed %s.\n" name))
-        unless(wm error("T5TW: MINUS wire failed %s.\n" name))
         schCreateWireLabel(cv car(wp) ep netName "lowerLeft" "R0" "stick" T5TW_W nil)
-        schCreateWireLabel(cv car(wm) em "VSS" "lowerLeft" "R0" "stick" T5TW_W nil)
+        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+        unless(gnd error("T5TW: GND creation failed %s.\n" name))
         inst
     )
 )
@@ -189,7 +176,7 @@ procedure(T5TW_Pin(cv pinMaster netName direction xy)
 )
 
 procedure(Create5TOTA_PMOS_TOTALW_V1_20260812()
-    let((cv nmos pmos pinMaster vdcMaster M1 M2 M3 M4 M5)
+    let((cv nmos pmos pinMaster vdcMaster gndMaster M1 M2 M3 M4 M5)
         printf("\n====================================================\n")
         printf("  5T OTA PMOS TOTALW V1\n")
         printf("====================================================\n")
@@ -199,12 +186,13 @@ procedure(Create5TOTA_PMOS_TOTALW_V1_20260812()
         pmos=dbOpenCellViewByType(T5TW_LIB T5TW_PCH "symbol" "" "r")
         pinMaster=dbOpenCellViewByType("basic" "iopin" "symbol" "" "r")
         vdcMaster=dbOpenCellViewByType("analogLib" "vdc" "symbol" "" "r")
+        gndMaster=dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")
         unless(nmos error("T5TW: cannot open nch.\n"))
         unless(pmos error("T5TW: cannot open pch.\n"))
         unless(pinMaster error("T5TW: cannot open iopin.\n"))
         unless(vdcMaster error("T5TW: cannot open vdc.\n"))
+        unless(gndMaster error("T5TW: cannot open gnd.\n"))
 
-        ; TotalW values are explicit. NF=1/M=1 for this validated topology.
         M1=T5TW_Place(cv nmos "M1" 0:6 "2u" "2u" "240n" "1" "1" "R0")
         M2=T5TW_Place(cv nmos "M2" 6:6 "2u" "2u" "240n" "1" "1" "R0")
         M5=T5TW_Place(cv nmos "M5" 3:2 "6u" "6u" "480n" "1" "1" "R0")
@@ -233,11 +221,11 @@ procedure(Create5TOTA_PMOS_TOTALW_V1_20260812()
         T5TW_Label(cv M5 "B" "VSS")
 
         T5TW_Pin(cv pinMaster "VOUT" "output" 9:8)
-        T5TW_VDC(cv vdcMaster "V_VDD_RULETEST" 12:14 "VDD" "1.5")
-        T5TW_VDC(cv vdcMaster "V_VBN_RULETEST" 12:9 "VBN_TAIL" "0.6")
-        T5TW_VDC(cv vdcMaster "V_VINP_RULETEST" 12:4 "VINP" "0.75")
-        T5TW_VDC(cv vdcMaster "V_VINN_RULETEST" 12:-1 "VINN" "0.75")
-        T5TW_VDC(cv vdcMaster "V_VSS_RULETEST" 18:4 "VSS" "0.0")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VDD_RULETEST" 12:14 "VDD" "1.5")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VBN_RULETEST" 12:9 "VBN_TAIL" "0.6")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VINP_RULETEST" 12:4 "VINP" "0.75")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VINN_RULETEST" 12:-1 "VINN" "0.75")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VSS_RULETEST" 18:4 "VSS" "0.0")
 
         unless(T5TW_PMOSPass(M3) error("T5TW: M3 orientation failed.\n"))
         unless(T5TW_PMOSPass(M4) error("T5TW: M4 orientation failed.\n"))
