@@ -209,12 +209,20 @@ procedure(TOTA8_SetVDC(inst value)
 
 ; Create and label a VDC source instance
 procedure(TOTA8_CreateVDC(cv master name xy plusNet minusNet value)
-    let((inst)
+    let((inst minus gndMaster gndInst)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("TOTA8: cannot create VDC %s.\n" name))
         TOTA8_SetVDC(inst value)
         TOTA8_LabelVDCTerminal(cv inst "PLUS" plusNet)
-        TOTA8_LabelVDCTerminal(cv inst "MINUS" minusNet)
+        if(equal(plusNet "VSS") then
+            minus=TOTA8_PinCenter(inst "MINUS")
+            gndMaster=dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")
+            unless(gndMaster error("TOTA8: cannot open analogLib/gnd.\n"))
+            gndInst=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+            unless(gndInst error("TOTA8: cannot create GND instance.\n"))
+        else
+            TOTA8_LabelVDCTerminal(cv inst "MINUS" minusNet)
+        )
         printf("TOTA8: %s DC=%s\n" name value)
         printf("TOTA8: VDC %s PLUS=%s MINUS=%s VALUE=%s\n" name plusNet minusNet value)
         inst

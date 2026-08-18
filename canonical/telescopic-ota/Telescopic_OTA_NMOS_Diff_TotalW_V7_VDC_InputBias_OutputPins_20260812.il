@@ -140,12 +140,20 @@ procedure(TOTA7_SetVDC(inst value)
 )
 
 procedure(TOTA7_CreateVDC(cv master name xy plusNet minusNet value)
-    let((inst)
+    let((inst minus gndMaster gndInst)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("TOTA7: cannot create VDC %s.\n" name))
         TOTA7_SetVDC(inst value)
         TOTA7_LabelTerminal(cv inst "PLUS" plusNet)
-        TOTA7_LabelTerminal(cv inst "MINUS" minusNet)
+        if(equal(plusNet "VSS") then
+            minus=TOTA7_PinCenter(inst "MINUS")
+            gndMaster=dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")
+            unless(gndMaster error("TOTA7: cannot open analogLib/gnd.\n"))
+            gndInst=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+            unless(gndInst error("TOTA7: cannot create GND instance.\n"))
+        else
+            TOTA7_LabelTerminal(cv inst "MINUS" minusNet)
+        )
         printf("TOTA7: %s DC=%s\n" name value)
         printf("TOTA7: VDC %s PLUS=%s MINUS=%s VALUE=%s\n" name plusNet minusNet value)
         inst

@@ -45,7 +45,7 @@ procedure(FCW_V3_VDCPinCenter(inst pinName)
 )
 
 procedure(FCW_V3_CreateVSSSource(cv)
-    let((master inst plus minus ep em wp wm)
+    let((master inst plus minus ep wp gndMaster gndInst)
         master = dbOpenCellViewByType(
             "analogLib"
             "vdc"
@@ -74,27 +74,29 @@ procedure(FCW_V3_CreateVSSSource(cv)
         minus = FCW_V3_VDCPinCenter(inst "MINUS")
 
         ep = list(car(plus) cadr(plus)+0.75)
-        em = list(car(minus) cadr(minus)-0.75)
 
         wp = schCreateWire(
             cv "route" "full" list(plus ep) 0.0625 0.0625 0
         )
-        wm = schCreateWire(
-            cv "route" "full" list(minus em) 0.0625 0.0625 0
-        )
 
-        unless(wp && wm
+        unless(wp
             error("FCW V3: VSS_SRC stub creation failed.\n")
         )
 
         schCreateWireLabel(
             cv car(wp) ep "VSS" "lowerLeft" "R0" "stick" 0.0625 nil
         )
-        schCreateWireLabel(
-            cv car(wm) em "VSS" "lowerLeft" "R0" "stick" 0.0625 nil
+
+        gndMaster = dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")
+        unless(gndMaster
+            error("FCW V3: cannot open analogLib/gnd.\n")
+        )
+        gndInst = dbCreateInst(cv gndMaster "VSS_SRC_GND" minus "R0")
+        unless(gndInst
+            error("FCW V3: cannot create GND instance.\n")
         )
 
-        printf("FCW V3: VSS_SRC = 0.0 V, PLUS->VSS, MINUS->VSS\n")
+        printf("FCW V3: VSS_SRC = 0.0 V, PLUS->VSS, MINUS->GND\n")
         inst
     )
 )
