@@ -1,3 +1,4 @@
+# Canonical VSS-only migration and validation is intentionally isolated from Python CI.
 name: Normalize canonical VSS source termination
 
 on:
