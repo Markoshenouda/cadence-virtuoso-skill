@@ -15,153 +15,19 @@ jobs:
       - name: Checkout branch
         uses: actions/checkout@v7
 
-      - name: Migrate canonical VDC MINUS to analogLib/gnd
-        shell: python
-        run: |
-          from pathlib import Path
-          import re
-          import sys
+      - name: Run strict migration and validation
+        run: python tools/migrate_vss_gnd.py
 
-          root = Path('canonical')
-          changed = []
-          skipped = []
-          failed = []
+      - name: Remove temporary migration tooling
+        run: rm -f tools/migrate_vss_gnd.py .github/workflows/vss-gnd-bulk-migrate.yml
 
-          def migrate_file(path):
-              text = path.read_text(encoding='utf-8')
-              original = text
-              matches = list(re.finditer(r'procedure\\((\\w+)_CreateVDC\\(cv master name xy value plusNet minusNet\\)', text))
-              if not matches:
-                  return 'skip', 'no canonical CreateVDC signature'
-
-              prefix = matches[0].group(1)
-              sig = f'procedure({prefix}_CreateVDC(cv master name xy value plusNet minusNet)'
-              new_sig = f'procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)'
-
-              # Work only inside the CreateVDC procedure block.
-              start = text.find(sig)
-              next_proc = text.find('\nprocedure(', start + len(sig))
-              end = len(text) if next_proc < 0 else next_proc
-              block = text[start:end]
-
-              already = ('gndMaster' in block and 'strcat(name "_GND")' in block
-                         and 'schCreateWire(cv "route" "full" list(minus em)' not in block
-                         and 'minusNet' not in block)
-              if already:
-                  return 'skip', 'already compliant'
-
-              old_body = re.search(
-                  r'let\\(\\(inst plus minus ep em wp wm\\)\\n'
-                  r'(.*?)'
-                  r'        printf\\("([^"\\n]*VDC %s = %sV PLUS=%s MINUS=%s[^"\\n]*)" name value plusNet minusNet\\)\\n'
-                  r'        inst\\n'
-                  r'    \)\\n\\)\\n', block, re.S)
-              if not old_body:
-                  return 'fail', 'CreateVDC body pattern requires manual review'
-
-              body_text = old_body.group(0)
-              new_body = '''let((inst gnd plus minus ep wp)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("%s: cannot create VDC %%s.\\n" name))\n        %s_SetVDC(inst value)\n        plus=%s_VDCPinCenter(inst "PLUS")\n        minus=%s_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+%s_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) %s_WIRE %s_WIRE 0)\n        unless(wp error("%s: VDC PLUS wiring failed for %%s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" %s_WIRE nil)\n        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n        unless(gnd error("%s: cannot create GND for VDC %%s.\\n" name))\n        printf("%s: VDC %%s = %%sV PLUS=%%s MINUS=GND\\n" name value plusNet)\n        inst\n    )\n)\n''' % (prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix)
-
-              block2 = block.replace(sig, new_sig, 1).replace(body_text, new_body, 1)
-              if block2 == block:
-                  return 'fail', 'no effective VDC change'
-              text = text[:start] + block2 + text[end:]
-
-              # Main generator: add gndMaster beside vdcMaster/pinMaster.
-              if 'gndMaster=CCA_OpenMaster' not in text and 'gndMaster=' not in text:
-                  text2, n1 = re.subn(
-                      r'(let\\(\\(cv [^\\n]*?vdcMaster pinMaster)',
-                      lambda m: m.group(1).replace('vdcMaster pinMaster', 'vdcMaster gndMaster pinMaster'),
-                      text,
-                      count=1)
-                  if n1 == 0:
-                      return 'fail', 'could not add gndMaster to main let list'
-                  text = text2
-
-              open_pat = rf'(vdcMaster={re.escape(prefix)}_OpenMaster\\("analogLib" "vdc"\\)\\n)(\\s*)(pinMaster={re.escape(prefix)}_OpenMaster)'
-              text2, n2 = re.subn(open_pat, rf'\\1        gndMaster={prefix}_OpenMaster("analogLib" "gnd")\\n\\2\\3', text, count=1)
-              if n2 == 0:
-                  return 'fail', 'could not add analogLib/gnd master'
-              text = text2
-
-              # Update all calls: add gndMaster and remove the old final VSS argument.
-              call_pat = re.compile(rf'{re.escape(prefix)}_CreateVDC\\(cv vdcMaster ([^\\n]*?) "VSS"\\)')
-              text2, n3 = call_pat.subn(lambda m: f'{prefix}_CreateVDC(cv vdcMaster gndMaster {m.group(1)})', text)
-              if n3 == 0:
-                  return 'fail', 'no VDC calls updated'
-              text = text2
-
-              # Strict post-validation for this file.
-              vdc_blocks = list(re.finditer(rf'procedure\\({re.escape(prefix)}_CreateVDC\\(cv master gndMaster name xy value plusNet\\).*?(?=\\nprocedure\\(|\\Z)', text, re.S))
-              if len(vdc_blocks) != 1:
-                  return 'fail', 'post-validation could not find exactly one modified CreateVDC'
-              vb = vdc_blocks[0].group(0)
-              required = ['gndMaster', 'strcat(name "_GND")', 'MINUS=GND']
-              forbidden = ['minusNet', 'wm=schCreateWire', 'schCreateWireLabel(cv car(wm)', 'em=list(car(minus)']
-              if any(x not in vb for x in required) or any(x in vb for x in forbidden):
-                  return 'fail', 'post-validation failed VDC contract'
-
-              if text != original:
-                  path.write_text(text, encoding='utf-8')
-                  return 'changed', f'{n3} VDC calls updated'
-              return 'skip', 'no textual change'
-
-          for path in sorted(root.rglob('*.il')):
-              status, reason = migrate_file(path)
-              if status == 'changed':
-                  changed.append(f'{path}: {reason}')
-              elif status == 'skip':
-                  skipped.append(f'{path}: {reason}')
-              else:
-                  failed.append(f'{path}: {reason}')
-
-          print('=== VSS/GND migration report ===')
-          print(f'Changed: {len(changed)}')
-          for x in changed: print('CHANGED', x)
-          print(f'Skipped: {len(skipped)}')
-          for x in skipped: print('SKIPPED', x)
-          print(f'Failed/manual review: {len(failed)}')
-          for x in failed: print('FAILED', x)
-
-          if failed:
-              sys.exit(2)
-
-      - name: Validate all canonical generators
-        shell: python
-        run: |
-          from pathlib import Path
-          import re, sys
-          failures=[]
-          total=0
-          compliant=0
-          for path in sorted(Path('canonical').rglob('*.il')):
-              text=path.read_text(encoding='utf-8')
-              for m in re.finditer(r'procedure\\((\\w+)_CreateVDC\\(cv master gndMaster name xy value plusNet\\).*?(?=\\nprocedure\\(|\\Z)', text, re.S):
-                  total += 1
-                  b=m.group(0)
-                  if ('strcat(name "_GND")' in b and 'schCreateWire(cv "route" "full" list(plus ep)' in b
-                      and 'schCreateWire(cv "route" "full" list(minus em)' not in b
-                      and 'schCreateWireLabel(cv car(wm)' not in b
-                      and 'minusNet' not in b):
-                      compliant += 1
-                  else:
-                      failures.append(str(path))
-          print(f'VDC procedures found: {total}')
-          print(f'VDC procedures compliant: {compliant}')
-          if failures:
-              print('NONCOMPLIANT:')
-              for x in failures: print(x)
-              sys.exit(3)
-
-      - name: Commit canonical changes and remove temporary migration workflow
-        shell: bash
+      - name: Commit canonical changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -f .github/workflows/vss-gnd-bulk-migrate.yml
-          git add canonical .github/workflows/vss-gnd-bulk-migrate.yml
+          git add canonical tools/migrate_vss_gnd.py .github/workflows/vss-gnd-bulk-migrate.yml
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No canonical changes were required."
             exit 0
           fi
           git commit -m "Update canonical VSS sources to analogLib GND [skip vss-gnd]"
