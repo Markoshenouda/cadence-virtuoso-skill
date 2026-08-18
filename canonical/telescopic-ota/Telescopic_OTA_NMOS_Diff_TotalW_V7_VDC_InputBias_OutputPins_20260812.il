@@ -209,7 +209,7 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260
         TOTA7_LabelTerminal(cv M1 "G" "VINP") TOTA7_LabelTerminal(cv M1 "D" "NLEFT") TOTA7_LabelTerminal(cv M1 "S" "TAIL") TOTA7_LabelTerminal(cv M1 "B" "VSS")
         TOTA7_LabelTerminal(cv M2 "G" "VINN") TOTA7_LabelTerminal(cv M2 "D" "NRIGHT") TOTA7_LabelTerminal(cv M2 "S" "TAIL") TOTA7_LabelTerminal(cv M2 "B" "VSS")
         TOTA7_LabelTerminal(cv M3 "G" "VBN_CAS") voutpEnd=TOTA7_LabelTerminal(cv M3 "D" "VOUTP") TOTA7_LabelTerminal(cv M3 "S" "NLEFT") TOTA7_LabelTerminal(cv M3 "B" "VSS")
-        TOTA7_LabelTerminal(cv M4 "G" "VBN_CAS") TOTA7_LabelTerminal(cv M4 "D" "VOUTN") TOTA7_LabelTerminal(cv M4 "S" "NRIGHT") TOTA7_LabelTerminal(cv M4 "B" "VSS")
+        TOTA7_LabelTerminal(cv M4 "G" "VBN_CAS") voutnEnd=TOTA7_LabelTerminal(cv M4 "D" "VOUTN") TOTA7_LabelTerminal(cv M4 "S" "NRIGHT") TOTA7_LabelTerminal(cv M4 "B" "VSS")
         TOTA7_LabelTerminal(cv M5 "G" "VBP_CAS") TOTA7_LabelTerminal(cv M5 "D" "VOUTP") TOTA7_LabelTerminal(cv M5 "S" "PLEFT") TOTA7_LabelTerminal(cv M5 "B" "VDD")
         TOTA7_LabelTerminal(cv M6 "G" "VBP_CAS") TOTA7_LabelTerminal(cv M6 "D" "VOUTN") TOTA7_LabelTerminal(cv M6 "S" "PRIGHT") TOTA7_LabelTerminal(cv M6 "B" "VDD")
         TOTA7_LabelTerminal(cv M7 "G" "VBP_LOAD") TOTA7_LabelTerminal(cv M7 "D" "PLEFT") TOTA7_LabelTerminal(cv M7 "S" "VDD") TOTA7_LabelTerminal(cv M7 "B" "VDD")
@@ -228,6 +228,7 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260
         TOTA7_CreatePin(cv pinMaster "VOUTN" "output" voutnEnd)
 
         dbSave(cv)
+        printf("STATUS   : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED\n")
         printf("TOTA7: SCHEMATIC_GENERATION_COMPLETED\n")
         t
     )
