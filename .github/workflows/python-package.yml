@@ -43,7 +43,7 @@ jobs:
         pytest
 
   canonical-vss-gnd:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'vss-gnd-bulk-update' && !contains(github.event.pull_request.head.sha, '')
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'vss-gnd-bulk-update'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout branch head
