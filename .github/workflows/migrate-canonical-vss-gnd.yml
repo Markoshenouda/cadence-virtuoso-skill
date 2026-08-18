@@ -1,0 +1,138 @@
+name: Migrate canonical VSS sources to analogLib GND
+
+on:
+  push:
+    branches: [vss-gnd-bulk-update]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: "!contains(github.event.head_commit.message, '[skip vss-gnd]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Migrate canonical generators
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import subprocess
+
+          root = Path('canonical')
+          changed = []
+          skipped = []
+          failed = []
+
+          for path in sorted(root.rglob('*.il')):
+              text = path.read_text(encoding='utf-8')
+              original = text
+              m = re.search(r'procedure\((\w+)_CreateVDC\(cv master name xy value plusNet minusNet\)', text)
+              if not m:
+                  skipped.append((str(path), 'no legacy CreateVDC'))
+                  continue
+              p = m.group(1)
+              sig = f'procedure({p}_CreateVDC(cv master name xy value plusNet minusNet)'
+              new_sig = f'procedure({p}_CreateVDC(cv master gndMaster name xy value plusNet)'
+              start = text.find(sig)
+              nxt = text.find('\nprocedure(', start + len(sig))
+              end = len(text) if nxt < 0 else nxt
+              block = text[start:end]
+
+              body = re.search(
+                  r'let\(\(inst plus minus ep em wp wm\)\n.*?printf\("[^"\n]*VDC %s = %sV PLUS=%s MINUS=%s\\n" name value plusNet minusNet\)\n        inst\n    \)\n\)\n',
+                  block, re.S)
+              if not body:
+                  failed.append((str(path), 'legacy CreateVDC body pattern not found'))
+                  continue
+
+              new_body = f'''let((inst gnd plus minus ep wp)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{p}: cannot create VDC %s.\\n" name))\n        {p}_SetVDC(inst value)\n        plus={p}_VDCPinCenter(inst "PLUS")\n        minus={p}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{p}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {p}_WIRE {p}_WIRE 0)\n        unless(wp error("{p}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {p}_WIRE nil)\n        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n        unless(gnd error("{p}: cannot create GND for VDC %s.\\n" name))\n        printf("{p}: VDC %s = %sV PLUS=%s MINUS=GND\\n" name value plusNet)\n        inst\n    )\n)\n'''
+
+              block2 = block.replace(sig, new_sig, 1).replace(body.group(0), new_body, 1)
+              text = text[:start] + block2 + text[end:]
+
+              # Main generator: add gndMaster next to vdcMaster/pinMaster.
+              if 'gndMaster=' not in text:
+                  text, n = re.subn(r'(let\(\(cv [^\n]*?vdcMaster) (pinMaster)', r'\1 gndMaster \2', text, count=1)
+                  if n != 1:
+                      failed.append((str(path), 'could not add gndMaster to let-list'))
+                      continue
+
+              # Open analogLib/gnd.
+              text, n = re.subn(
+                  rf'(vdcMaster={re.escape(p)}_OpenMaster\("analogLib" "vdc"\)\n)(\s*)(pinMaster={re.escape(p)}_OpenMaster)',
+                  rf'\1        gndMaster={p}_OpenMaster("analogLib" "gnd")\n\2\3',
+                  text, count=1)
+              if n != 1:
+                  failed.append((str(path), 'could not add gndMaster master'))
+                  continue
+
+              # Update every legacy VDC call; all canonical sources used VSS as minusNet.
+              text, n = re.subn(
+                  rf'{re.escape(p)}_CreateVDC\(cv vdcMaster ([^\n]*?) "VSS"\)',
+                  lambda x: f'{p}_CreateVDC(cv vdcMaster gndMaster {x.group(1)})',
+                  text,
+              )
+              if n == 0:
+                  failed.append((str(path), 'no VDC calls updated'))
+                  continue
+
+              if 'minusNet' in block2 or 'list(minus em)' in block2 or 'wm=schCreateWire' in block2:
+                  failed.append((str(path), 'post-migration VSS/GND contract violation'))
+                  continue
+
+              path.write_text(text, encoding='utf-8')
+              changed.append((str(path), n))
+
+          print('=== canonical VSS/GND migration ===')
+          print('Changed:', len(changed))
+          for p,n in changed: print('CHANGED', p, 'VDC_CALLS', n)
+          print('Skipped:', len(skipped))
+          for p,r in skipped: print('SKIPPED', p, r)
+          print('Failed:', len(failed))
+          for p,r in failed: print('FAILED', p, r)
+          if failed:
+              raise SystemExit(2)
+
+      - name: Validate migrated canonical files
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          failures=[]
+          total=0
+          for path in sorted(Path('canonical').rglob('*.il')):
+              text=path.read_text(encoding='utf-8')
+              for m in re.finditer(r'procedure\((\w+)_CreateVDC\(cv master gndMaster name xy value plusNet\).*?(?=\nprocedure\(|\Z)', text, re.S):
+                  total += 1
+                  b=m.group(0)
+                  ok=(
+                      'gndMaster' in b and
+                      'strcat(name "_GND")' in b and
+                      'list(plus ep)' in b and
+                      'list(minus em)' not in b and
+                      'wm=schCreateWire' not in b and
+                      'minusNet' not in b
+                  )
+                  if not ok:
+                      failures.append(str(path))
+          print('Migrated CreateVDC procedures:', total)
+          if failures:
+              print('NONCOMPLIANT')
+              for x in failures: print(x)
+              raise SystemExit(3)
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add canonical
+          if git diff --cached --quiet; then
+            echo "No canonical changes."
+            exit 0
+          fi
+          git commit -m "Migrate canonical VSS sources to analogLib GND [skip vss-gnd]"
+          git push
