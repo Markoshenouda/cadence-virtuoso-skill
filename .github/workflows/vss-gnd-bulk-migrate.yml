@@ -1,19 +1,22 @@
 name: VSS to analogLib GND bulk migration
 
 on:
-  push:
-    branches: [vss-gnd-bulk-update]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
 
 permissions:
   contents: write
 
 jobs:
   migrate:
-    if: "!contains(github.event.head_commit.message, '[skip vss-gnd]')"
+    if: "!contains(github.event.pull_request.head.sha, '') && !contains(github.event.head_commit.message, '[skip vss-gnd]')"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout PR branch
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Run strict migration and validation
         run: python tools/migrate_vss_gnd.py
@@ -31,4 +34,4 @@ jobs:
             exit 0
           fi
           git commit -m "Update canonical VSS sources to analogLib GND [skip vss-gnd]"
-          git push
+          git push origin HEAD:${{ github.head_ref }}
