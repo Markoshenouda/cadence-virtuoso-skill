@@ -39,7 +39,12 @@ def migrate_vdc_procedure(text, match):
         new_sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
         pinc = f"{prefix}_VPin"
         setv = f"{prefix}_SetVDC"
-    done = new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block
+    done = (
+        new_sig in block
+        and 'if(equal(minusNet "GND") then' in block
+        and 'strcat(name "_GND")' in block
+        and "wm=schCreateWire" in block
+    )
     if done:
         return text, False
     width = wire_width(text, block, prefix)
@@ -129,6 +134,23 @@ def migrate_calls(text):
     return text, changed
 
 
+def migrate_special_contracts(path, text):
+    if path.name != "Telescopic_OTA_NMOS_Diff_TotalW_V7_VDC_InputBias_OutputPins_20260812.il":
+        return text
+    changed = False
+    old = 'TOTA7_LabelTerminal(cv M4 "D" "VOUTN")'
+    new = 'voutnEnd=TOTA7_LabelTerminal(cv M4 "D" "VOUTN")'
+    if old in text and new not in text:
+        text = text.replace(old, new, 1)
+        changed = True
+    marker = 'printf("TOTA7: SCHEMATIC_GENERATION_COMPLETED\\n")'
+    status = 'printf("STATUS   : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED\\n")\n        '
+    if 'STATUS   : SCHEMATIC GENERATED; PERFORMANCE NOT VERIFIED' not in text and marker in text:
+        text = text.replace(marker, status + marker, 1)
+        changed = True
+    return text
+
+
 def migrate_file(path):
     text = path.read_text(encoding="utf-8")
     original = text
@@ -136,13 +158,14 @@ def migrate_file(path):
     for match in reversed(matches):
         text, _ = migrate_vdc_procedure(text, match)
     text, _ = migrate_calls(text)
+    text = migrate_special_contracts(path, text)
     if text != original:
         path.write_text(text, encoding="utf-8")
         return True
     return False
 
 
-def validate():
+def validate():  # noqa: C901
     failures = []
     checked = 0
     for path in sorted(ROOT.rglob("*.il")):
@@ -167,7 +190,6 @@ def validate():
                 failures.append(f"{path}: {prefix}_{kind}: legacy VSS MINUS path missing")
             if 'strcat(name "_GND")' not in block:
                 failures.append(f"{path}: {prefix}_{kind}: unique GND naming missing")
-
         for m in re.finditer(r'(?m)^\s*(\w+)_CreateVDC\(cv vdcMaster gndMaster\s+"([^"]+)"\s+([^\n]*)\)$', text):
             prefix, _, rest = m.groups()
             try:
@@ -178,7 +200,6 @@ def validate():
             expected = "GND" if plus_net == "VSS" else "VSS"
             if minus_net != expected:
                 failures.append(f"{path}: {prefix}_CreateVDC: PLUS={plus_net} requires MINUS={expected}, found {minus_net}")
-
         for m in re.finditer(r'(?m)^\s*(\w+)_VDC\(cv vdcMaster gndMaster\s+"([^"]+)"\s+([^\n]*)\)$', text):
             prefix, _, rest = m.groups()
             try:
@@ -189,7 +210,6 @@ def validate():
             expected = "GND" if plus_net == "VSS" else "VSS"
             if minus_net != expected:
                 failures.append(f"{path}: {prefix}_VDC: PLUS={plus_net} requires MINUS={expected}, found {minus_net}")
-
     print(f"Checked {checked} canonical VDC generator files")
     if failures:
         print("VALIDATION FAILURES:")
