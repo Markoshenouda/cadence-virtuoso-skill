@@ -27,28 +27,17 @@ def migrate_vdc_procedure(text, match):
     block = text[start:end]
 
     if kind == "CreateVDC":
-        sigs = [
-            f"procedure({prefix}_CreateVDC(cv master name xy value plusNet minusNet)",
-            f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)",
-        ]
         new_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
         pinc = f"{prefix}_VDCPinCenter"
         setv = f"{prefix}_SetVDC"
+        if new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block:
+            return text, False
     else:
-        sigs = [
-            f"procedure({prefix}_VDC(cv master name xy netName value)",
-            f"procedure({prefix}_VDC(cv master name xy netName value minusNet)",
-            f"procedure({prefix}_VDC(cv master gndMaster name xy netName value)",
-            f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)",
-        ]
         new_sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
         pinc = f"{prefix}_VPin"
         setv = f"{prefix}_SetVDC"
-
-    if new_sig in block:
-        return text, False
-    if not any(sig in block for sig in sigs):
-        return text, False
+        if new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block:
+            return text, False
 
     width = wire_width(block)
     body = f'''{new_sig}
@@ -77,7 +66,6 @@ def migrate_vdc_procedure(text, match):
 )
 '''
 
-    pstart = block.find("procedure(")
     return text[:start] + body + text[end:], True
 
 
@@ -91,16 +79,21 @@ def migrate_calls(text):
         indent, prefix, args = m.groups()
         has_gnd = "cv vdcMaster gndMaster " in m.group(0)
         quoted = re.findall(r'"([^"]*)"', args)
-        if len(quoted) < 2:
+        if len(quoted) < 1:
             raise ValueError(f"{prefix}_CreateVDC: malformed call")
-        plus_net, minus_net = quoted[-2], quoted[-1]
+        if len(quoted) >= 2 and quoted[-1] in ("GND", "VSS"):
+            plus_net, minus_net = quoted[-2], quoted[-1]
+        else:
+            plus_net = quoted[-1]
+            minus_net = "GND" if plus_net == "VSS" else "VSS"
+            args = args + f' "{minus_net}"'
+            changed = True
         expected = "GND" if plus_net == "VSS" else "VSS"
         if minus_net != expected:
             args = args.rsplit('"', 2)[0] + f'"{expected}"'
             changed = True
         if not has_gnd:
             changed = True
-            return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster {args})'
         return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster {args})'
 
     text = create_pat.sub(create_repl, text)
@@ -114,18 +107,16 @@ def migrate_calls(text):
         quoted = re.findall(r'"([^"]*)"', args)
         if len(quoted) < 2:
             raise ValueError(f"{prefix}_VDC: malformed call")
-        # VDC calls use: name xy plusNet value [minusNet].
         if quoted[-1] in ("GND", "VSS") and len(quoted) >= 3:
             plus_net, minus_net = quoted[-2], quoted[-1]
-            if len(quoted) >= 3:
-                expected = "GND" if plus_net == "VSS" else "VSS"
-                if minus_net != expected:
-                    args = args.rsplit('"', 2)[0] + f'"{expected}"'
-                    changed = True
         else:
             plus_net = quoted[-2]
-            expected = "GND" if plus_net == "VSS" else "VSS"
-            args = args + f' "{expected}"'
+            minus_net = "GND" if plus_net == "VSS" else "VSS"
+            args = args + f' "{minus_net}"'
+            changed = True
+        expected = "GND" if plus_net == "VSS" else "VSS"
+        if minus_net != expected:
+            args = args.rsplit('"', 2)[0] + f'"{expected}"'
             changed = True
         if not has_gnd:
             changed = True
@@ -162,10 +153,11 @@ def validate():
         for match in matches:
             prefix, kind = match.group(1), match.group(2)
             block = text[match.start():block_end(text, match.start())]
-            if kind == "CreateVDC":
-                sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
-            else:
-                sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
+            sig = (
+                f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
+                if kind == "CreateVDC"
+                else f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
+            )
             if sig not in block:
                 failures.append(f"{path}: {prefix}_{kind}: non-explicit VSS/GND signature")
             if 'if(equal(minusNet "GND") then' not in block:
