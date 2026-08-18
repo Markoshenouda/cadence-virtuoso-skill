@@ -9,6 +9,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
 
@@ -38,3 +41,26 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+
+  canonical-vss-gnd:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'vss-gnd-bulk-update' && !contains(github.event.pull_request.head.sha, '')
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout branch head
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
+        fetch-depth: 0
+    - name: Run canonical VSS/GND migration and validation
+      run: python scripts/migrate_canonical_vss_gnd.py
+    - name: Commit migrated canonical generators
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add canonical
+        if git diff --cached --quiet; then
+          echo "No canonical generator changes were required."
+          exit 0
+        fi
+        git commit -m "Migrate canonical VDC MINUS terminals to analogLib GND [skip vss-gnd]"
+        git push origin HEAD:${{ github.event.pull_request.head.ref }}
