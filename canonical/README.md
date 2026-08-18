@@ -49,6 +49,8 @@ For a VSS source the resulting schematic is therefore:
 
 This VSS/GND contract is a canonical generator requirement and must be preserved in future generators, skills, runbooks, and generator tests.
 
+The repository CI migration/validation workflow also checks this contract across canonical VDC generators before accepting the migration commit.
+
 | Family | Canonical artifact | Status |
 |---|---|---|
 | 5T OTA | `5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; requires Cadence re-run after migration |
