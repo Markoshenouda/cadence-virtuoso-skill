@@ -11,7 +11,7 @@ def block_end(text, start):
     return len(text) if nxt < 0 else nxt
 
 
-def wire_width(block, prefix):
+def wire_width(text, block, prefix):
     patterns = [
         r'\w+\s*=\s*schCreateWire\(cv\s+"route"\s+"full"\s+list\(plus\s+ep\)\s+([^\s\)]+)\s+([^\s\)]+)\s+0\)',
         r'\w+\s*=\s*schCreateWire\(cv\s+"route"\s+"full"\s+list\(plus\s+ep\)\s+([^\s\)]+)\s+([^\s\)]+)\s*\)',
@@ -20,7 +20,7 @@ def wire_width(block, prefix):
         m = re.search(pattern, block)
         if m and m.group(1) == m.group(2):
             return m.group(1)
-    m = re.search(rf'(?m)\bsetq\s*\(\s*{re.escape(prefix)}_WIRE\s+([^\s\)]+)\s*\)', block)
+    m = re.search(rf'(?m)\bsetq\s*\(\s*{re.escape(prefix)}_WIRE\s+([^\s\)]+)\s*\)', text)
     if m:
         return m.group(1)
     raise ValueError("cannot determine PLUS wire width")
@@ -45,7 +45,7 @@ def migrate_vdc_procedure(text, match):
     if done:
         return text, False
 
-    width = wire_width(block, prefix)
+    width = wire_width(text, block, prefix)
     body = f'''{new_sig}
     let((inst gnd plus minus ep em wp wm)
         inst=dbCreateInst(cv master name xy "R0")
@@ -113,9 +113,8 @@ def migrate_calls(text):
     def create_repl(m):
         nonlocal changed
         indent, prefix, name, rest = m.groups()
-        value, plus_net, minus_net = parse_create_call(rest)
-        expected = "GND" if plus_net == "VSS" else "VSS"
-        minus_net = expected
+        value, plus_net, _ = parse_create_call(rest)
+        minus_net = "GND" if plus_net == "VSS" else "VSS"
         changed = True
         return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster "{name}" "{value}" "{plus_net}" "{minus_net}")'
 
@@ -126,10 +125,10 @@ def migrate_calls(text):
     def vdc_repl(m):
         nonlocal changed
         indent, prefix, name, rest = m.groups()
-        coord, plus_net, value, minus_net = parse_vdc_call(rest)
-        expected = "GND" if plus_net == "VSS" else "VSS"
+        coord, plus_net, value, _ = parse_vdc_call(rest)
+        minus_net = "GND" if plus_net == "VSS" else "VSS"
         changed = True
-        return f'{indent}{prefix}_VDC(cv vdcMaster gndMaster "{name}" {coord} "{plus_net}" "{value}" "{expected}")'
+        return f'{indent}{prefix}_VDC(cv vdcMaster gndMaster "{name}" {coord} "{plus_net}" "{value}" "{minus_net}")'
 
     text = vdc_pat.sub(vdc_repl, text)
     return text, changed
@@ -177,7 +176,7 @@ def validate():
         for m in re.finditer(r'(?m)^\s*(\w+)_CreateVDC\(cv vdcMaster gndMaster\s+"([^"]+)"\s+([^\n]*)\)$', text):
             prefix, _, rest = m.groups()
             try:
-                value, plus_net, minus_net = parse_create_call(rest)
+                _, plus_net, minus_net = parse_create_call(rest)
             except ValueError:
                 failures.append(f"{path}: malformed {prefix}_CreateVDC call")
                 continue
