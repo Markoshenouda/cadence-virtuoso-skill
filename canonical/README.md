@@ -20,6 +20,35 @@ totalM = NF * M
 
 `wf` is the verified `tsmcN65 total_width(M)` field and is the authoritative TotalW field.
 
+## Mandatory VSS / VDC source contract
+
+Every canonical generator that instantiates a supply or bias `analogLib/vdc` source must use the following schematic contract:
+
+```text
+VDC PLUS  -> existing wire + the source's normal net label
+VDC MINUS -> direct analogLib/gnd
+```
+
+The `MINUS` side must **not** create a wire and must **not** create a `VSS` wire label. The `VDC` instance itself remains present; only its `MINUS` termination changes from the old VSS wire to `analogLib/gnd`.
+
+Each generated `analogLib/gnd` instance must have a unique instance name, preferably derived from the VDC source name, e.g.:
+
+```skill
+strcat(name "_GND")
+```
+
+For a VSS source the resulting schematic is therefore:
+
+```text
+        VSS
+         |
+        VDC
+         |
+        GND
+```
+
+This VSS/GND contract is a canonical generator requirement and must be preserved in future generators, skills, runbooks, and generator tests.
+
 | Family | Canonical artifact | Status |
 |---|---|---|
 | 5T OTA | `5t-ota/5T_OTA_PMOS_TOTALW_V2_20260812.il` | Current TotalW-first generator; requires Cadence re-run after migration |
