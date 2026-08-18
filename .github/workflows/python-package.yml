@@ -9,12 +9,8 @@ on:
   pull_request:
     branches: [ "main" ]
 
-permissions:
-  contents: write
-
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -34,33 +30,8 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
-        # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
         pytest
-
-  canonical-vss-gnd:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'vss-gnd-bulk-update'
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout branch head
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.ref }}
-        fetch-depth: 0
-    - name: Run canonical VSS/GND migration and validation
-      run: python scripts/migrate_canonical_vss_gnd.py
-    - name: Commit migrated canonical generators
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add canonical
-        if git diff --cached --quiet; then
-          echo "No canonical generator changes were required."
-          exit 0
-        fi
-        git commit -m "Migrate canonical VDC MINUS terminals to analogLib GND [skip vss-gnd]"
-        git push origin HEAD:${{ github.event.pull_request.head.ref }}
