@@ -15,41 +15,43 @@ def wire_width(block):
         r'wp\s*=\s*schCreateWire\(cv\s+"route"\s+"full"\s+list\(plus\s+ep\)\s+([^\s\)]+)\s+([^\s\)]+)\s+0\)',
         block,
     )
-    if not m:
+    if not m or m.group(1) != m.group(2):
         raise ValueError("cannot determine PLUS wire width")
-    if m.group(1) != m.group(2):
-        raise ValueError("PLUS wire width arguments differ")
     return m.group(1)
 
 
 def migrate_vdc_procedure(text, match):
-    prefix = match.group(1)
-    kind = match.group(2)
+    prefix, kind = match.group(1), match.group(2)
     start = match.start()
     end = block_end(text, start)
     block = text[start:end]
 
     if kind == "CreateVDC":
-        broad = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)"
-        explicit = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
-        setv = f"{prefix}_SetVDC"
+        sigs = [
+            f"procedure({prefix}_CreateVDC(cv master name xy value plusNet minusNet)",
+            f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)",
+        ]
+        new_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
         pinc = f"{prefix}_VDCPinCenter"
-    else:
-        broad = f"procedure({prefix}_VDC(cv master gndMaster name xy netName value)"
-        explicit = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
         setv = f"{prefix}_SetVDC"
+    else:
+        sigs = [
+            f"procedure({prefix}_VDC(cv master name xy netName value)",
+            f"procedure({prefix}_VDC(cv master name xy netName value minusNet)",
+            f"procedure({prefix}_VDC(cv master gndMaster name xy netName value)",
+            f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)",
+        ]
+        new_sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
         pinc = f"{prefix}_VPin"
+        setv = f"{prefix}_SetVDC"
 
-    if broad not in block or explicit in block:
+    if new_sig in block:
+        return text, False
+    if not any(sig in block for sig in sigs):
         return text, False
 
     width = wire_width(block)
-    if kind == "CreateVDC":
-        value_arg = "value"
-    else:
-        value_arg = "value"
-
-    body = f'''procedure({prefix}_{kind}(cv master gndMaster name xy {'value plusNet minusNet' if kind == 'CreateVDC' else 'plusNet value minusNet'})
+    body = f'''{new_sig}
     let((inst gnd plus minus ep em wp wm)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("{prefix}: cannot create VDC %s.\\n" name))
@@ -75,51 +77,61 @@ def migrate_vdc_procedure(text, match):
 )
 '''
 
-    new_block = block[:block.find("procedure(")] + body
-    return text[:start] + new_block + text[end:], True
+    pstart = block.find("procedure(")
+    return text[:start] + body + text[end:], True
 
 
 def migrate_calls(text):
     changed = False
 
-    # CreateVDC: ... value plusNet [minusNet]
-    pat_create = re.compile(r'(?m)^(\s*)(\w+)_CreateVDC\(cv vdcMaster gndMaster ([^\n]*)\)$')
+    create_pat = re.compile(r'(?m)^(\s*)(\w+)_CreateVDC\(cv vdcMaster(?: gndMaster)? ([^\n]*)\)$')
 
-    def repl_create(m):
+    def create_repl(m):
         nonlocal changed
         indent, prefix, args = m.groups()
-        args = args.strip()
-        quoted = re.findall(r'"([^"]*)"', args)
-        if len(quoted) < 1:
-            raise ValueError(f"{prefix}_CreateVDC: cannot identify PLUS net")
-        # Already explicit: last quoted argument is MINUS.
-        if len(quoted) >= 2 and quoted[-1] in ("GND", "VSS"):
-            return m.group(0)
-        plus_net = quoted[-1]
-        minus_net = "GND" if plus_net == "VSS" else "VSS"
-        changed = True
-        return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster {args} "{minus_net}")'
-
-    text = pat_create.sub(repl_create, text)
-
-    # Legacy 5T-style VDC: ... xy plusNet value [minusNet]
-    pat_vdc = re.compile(r'(?m)^(\s*)(\w+)_VDC\(cv vdcMaster gndMaster ([^\n]*)\)$')
-
-    def repl_vdc(m):
-        nonlocal changed
-        indent, prefix, args = m.groups()
-        args = args.strip()
+        has_gnd = "cv vdcMaster gndMaster " in m.group(0)
         quoted = re.findall(r'"([^"]*)"', args)
         if len(quoted) < 2:
-            raise ValueError(f"{prefix}_VDC: cannot identify PLUS net/value")
-        if quoted[-1] in ("GND", "VSS") and len(quoted) >= 3:
-            return m.group(0)
-        plus_net = quoted[-2]
-        minus_net = "GND" if plus_net == "VSS" else "VSS"
-        changed = True
-        return f'{indent}{prefix}_VDC(cv vdcMaster gndMaster {args} "{minus_net}")'
+            raise ValueError(f"{prefix}_CreateVDC: malformed call")
+        plus_net, minus_net = quoted[-2], quoted[-1]
+        expected = "GND" if plus_net == "VSS" else "VSS"
+        if minus_net != expected:
+            args = args.rsplit('"', 2)[0] + f'"{expected}"'
+            changed = True
+        if not has_gnd:
+            changed = True
+            return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster {args})'
+        return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster {args})'
 
-    text = pat_vdc.sub(repl_vdc, text)
+    text = create_pat.sub(create_repl, text)
+
+    vdc_pat = re.compile(r'(?m)^(\s*)(\w+)_VDC\(cv vdcMaster(?: gndMaster)? ([^\n]*)\)$')
+
+    def vdc_repl(m):
+        nonlocal changed
+        indent, prefix, args = m.groups()
+        has_gnd = "cv vdcMaster gndMaster " in m.group(0)
+        quoted = re.findall(r'"([^"]*)"', args)
+        if len(quoted) < 2:
+            raise ValueError(f"{prefix}_VDC: malformed call")
+        # VDC calls use: name xy plusNet value [minusNet].
+        if quoted[-1] in ("GND", "VSS") and len(quoted) >= 3:
+            plus_net, minus_net = quoted[-2], quoted[-1]
+            if len(quoted) >= 3:
+                expected = "GND" if plus_net == "VSS" else "VSS"
+                if minus_net != expected:
+                    args = args.rsplit('"', 2)[0] + f'"{expected}"'
+                    changed = True
+        else:
+            plus_net = quoted[-2]
+            expected = "GND" if plus_net == "VSS" else "VSS"
+            args = args + f' "{expected}"'
+            changed = True
+        if not has_gnd:
+            changed = True
+        return f'{indent}{prefix}_VDC(cv vdcMaster gndMaster {args})'
+
+    text = vdc_pat.sub(vdc_repl, text)
     return text, changed
 
 
@@ -155,7 +167,7 @@ def validate():
             else:
                 sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
             if sig not in block:
-                failures.append(f"{path}: {prefix}_{kind}: non-explicit MINUS contract")
+                failures.append(f"{path}: {prefix}_{kind}: non-explicit VSS/GND signature")
             if 'if(equal(minusNet "GND") then' not in block:
                 failures.append(f"{path}: {prefix}_{kind}: missing GND-only branch")
             if "wm=schCreateWire" not in block or "minusNet" not in block:
