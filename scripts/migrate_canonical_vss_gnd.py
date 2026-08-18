@@ -11,13 +11,15 @@ def block_end(text, start):
 
 
 def wire_width(block):
-    m = re.search(
-        r'wp\s*=\s*schCreateWire\(cv\s+"route"\s+"full"\s+list\(plus\s+ep\)\s+([^\s\)]+)\s+([^\s\)]+)\s+0\)',
-        block,
-    )
-    if not m or m.group(1) != m.group(2):
-        raise ValueError("cannot determine PLUS wire width")
-    return m.group(1)
+    patterns = [
+        r'\w+\s*=\s*schCreateWire\(cv\s+"route"\s+"full"\s+list\(plus\s+ep\)\s+([^\s\)]+)\s+([^\s\)]+)\s+0\)',
+        r'\w+\s*=\s*schCreateWire\(cv\s+"route"\s+"full"\s+list\(plus\s+ep\)\s+([^\s\)]+)\s+([^\s\)]+)\s*\)',
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, block)
+        if m and m.group(1) == m.group(2):
+            return m.group(1)
+    raise ValueError("cannot determine PLUS wire width")
 
 
 def migrate_vdc_procedure(text, match):
@@ -30,14 +32,14 @@ def migrate_vdc_procedure(text, match):
         new_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
         pinc = f"{prefix}_VDCPinCenter"
         setv = f"{prefix}_SetVDC"
-        if new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block:
-            return text, False
+        done = new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block
     else:
         new_sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
         pinc = f"{prefix}_VPin"
         setv = f"{prefix}_SetVDC"
-        if new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block:
-            return text, False
+        done = new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block
+    if done:
+        return text, False
 
     width = wire_width(block)
     body = f'''{new_sig}
@@ -65,34 +67,31 @@ def migrate_vdc_procedure(text, match):
     )
 )
 '''
-
     return text[:start] + body + text[end:], True
 
 
 def migrate_calls(text):
     changed = False
-
     create_pat = re.compile(r'(?m)^(\s*)(\w+)_CreateVDC\(cv vdcMaster(?: gndMaster)? ([^\n]*)\)$')
 
     def create_repl(m):
         nonlocal changed
         indent, prefix, args = m.groups()
-        has_gnd = "cv vdcMaster gndMaster " in m.group(0)
         quoted = re.findall(r'"([^"]*)"', args)
-        if len(quoted) < 1:
+        if not quoted:
             raise ValueError(f"{prefix}_CreateVDC: malformed call")
         if len(quoted) >= 2 and quoted[-1] in ("GND", "VSS"):
             plus_net, minus_net = quoted[-2], quoted[-1]
         else:
             plus_net = quoted[-1]
             minus_net = "GND" if plus_net == "VSS" else "VSS"
-            args = args + f' "{minus_net}"'
+            args += f' "{minus_net}"'
             changed = True
         expected = "GND" if plus_net == "VSS" else "VSS"
         if minus_net != expected:
             args = args.rsplit('"', 2)[0] + f'"{expected}"'
             changed = True
-        if not has_gnd:
+        if "cv vdcMaster gndMaster " not in m.group(0):
             changed = True
         return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster {args})'
 
@@ -103,7 +102,6 @@ def migrate_calls(text):
     def vdc_repl(m):
         nonlocal changed
         indent, prefix, args = m.groups()
-        has_gnd = "cv vdcMaster gndMaster " in m.group(0)
         quoted = re.findall(r'"([^"]*)"', args)
         if len(quoted) < 2:
             raise ValueError(f"{prefix}_VDC: malformed call")
@@ -112,13 +110,13 @@ def migrate_calls(text):
         else:
             plus_net = quoted[-2]
             minus_net = "GND" if plus_net == "VSS" else "VSS"
-            args = args + f' "{minus_net}"'
+            args += f' "{minus_net}"'
             changed = True
         expected = "GND" if plus_net == "VSS" else "VSS"
         if minus_net != expected:
             args = args.rsplit('"', 2)[0] + f'"{expected}"'
             changed = True
-        if not has_gnd:
+        if "cv vdcMaster gndMaster " not in m.group(0):
             changed = True
         return f'{indent}{prefix}_VDC(cv vdcMaster gndMaster {args})'
 
@@ -142,14 +140,12 @@ def migrate_file(path):
 def validate():
     failures = []
     checked = 0
-
     for path in sorted(ROOT.rglob("*.il")):
         text = path.read_text(encoding="utf-8")
         matches = list(re.finditer(r'procedure\((\w+)_(CreateVDC|VDC)\(', text))
         if not matches:
             continue
         checked += 1
-
         for match in matches:
             prefix, kind = match.group(1), match.group(2)
             block = text[match.start():block_end(text, match.start())]
@@ -166,7 +162,6 @@ def validate():
                 failures.append(f"{path}: {prefix}_{kind}: legacy VSS MINUS path missing")
             if 'strcat(name "_GND")' not in block:
                 failures.append(f"{path}: {prefix}_{kind}: unique GND naming missing")
-
         for m in re.finditer(r'(?m)^\s*(\w+)_(CreateVDC|VDC)\(cv vdcMaster gndMaster ([^\n]*)\)$', text):
             prefix, kind, args = m.groups()
             quoted = re.findall(r'"([^"]*)"', args)
@@ -183,7 +178,6 @@ def validate():
             expected = "GND" if plus_net == "VSS" else "VSS"
             if minus_net != expected:
                 failures.append(f"{path}: {prefix}_{kind}: PLUS={plus_net} requires MINUS={expected}, found {minus_net}")
-
     print(f"Checked {checked} canonical VDC generator files")
     if failures:
         print("VALIDATION FAILURES:")
@@ -203,7 +197,6 @@ def main():
         except ValueError as exc:
             print(f"ERROR: {path}: {exc}")
             return 1
-
     print("NORMALIZED:")
     for item in changed:
         print(f"  {item}")
