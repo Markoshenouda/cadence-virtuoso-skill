@@ -5,129 +5,122 @@ import sys
 ROOT = Path("canonical")
 
 
+def _block_end(text, start):
+    next_proc = text.find("\nprocedure(", start + 1)
+    return len(text) if next_proc < 0 else next_proc
+
+
 def migrate_file(path: Path):
     text = path.read_text(encoding="utf-8")
-    matches = list(
-        re.finditer(
-            r"procedure\((\w+)_CreateVDC\(cv master name xy value plusNet minusNet\)",
-            text,
-        )
-    )
-    if not matches:
-        return False, "no legacy CreateVDC"
-
     original = text
-    prefixes = []
+    changed = False
 
+    # Repair the already-migrated broad shape without changing the behavior of
+    # non-VSS VDC sources. The caller explicitly selects GND only for PLUS=VSS.
+    matches = list(re.finditer(r"procedure\((\w+)_CreateVDC\(", text))
     for match in reversed(matches):
         prefix = match.group(1)
-        prefixes.append(prefix)
-        old_sig = f"procedure({prefix}_CreateVDC(cv master name xy value plusNet minusNet)"
-        new_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)"
         start = match.start()
-        next_proc = text.find("\nprocedure(", match.end())
-        end = len(text) if next_proc < 0 else next_proc
+        end = _block_end(text, start)
         block = text[start:end]
+        broad_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)"
+        if broad_sig not in block:
+            continue
 
-        # Only touch the known legacy VDC implementation. Unknown variants are
-        # reported rather than guessed or rewritten blindly.
-        if "wm=schCreateWire" not in block or "minusNet" not in block:
-            return False, f"{prefix}: legacy shape not recognized"
-
-        body_match = re.search(
-            r"let\(\(inst plus minus ep em wp wm\)\n.*?\n        inst\n    \)\n\)\n",
+        wire_m = re.search(
+            r'wp=schCreateWire\(cv "route" "full" list\(plus ep\) ([A-Za-z0-9_]+) \\1 0\)',
             block,
-            re.S,
         )
-        if not body_match:
-            return False, f"{prefix}: legacy body not recognized"
+        if not wire_m:
+            return False, f"{prefix}: cannot determine PLUS wire width"
+        wire = wire_m.group(1)
 
-        body = f'''let((inst gnd plus minus ep wp)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{prefix}: cannot create VDC %s.\\n" name))\n        {prefix}_SetVDC(inst value)\n        plus={prefix}_VDCPinCenter(inst "PLUS")\n        minus={prefix}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{prefix}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {prefix}_WIRE {prefix}_WIRE 0)\n        unless(wp error("{prefix}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {prefix}_WIRE nil)\n        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n        unless(gnd error("{prefix}: cannot create GND for VDC %s.\\n" name))\n        printf("{prefix}: VDC %s = %sV PLUS=%s MINUS=GND\\n" name value plusNet)\n        inst\n    )\n)\n'''
+        body_start = block.find("let((", block.find(f"procedure({prefix}_CreateVDC"))
+        if body_start < 0:
+            return False, f"{prefix}: cannot find CreateVDC body"
 
-        block = block.replace(old_sig, new_sig, 1)
-        block = block.replace(body_match.group(0), body, 1)
-        text = text[:start] + block + text[end:]
+        body = f'''let((inst gnd plus minus ep em wp wm)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{prefix}: cannot create VDC %s.\\n" name))\n        {prefix}_SetVDC(inst value)\n        plus={prefix}_VDCPinCenter(inst "PLUS")\n        minus={prefix}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{prefix}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {wire} {wire} 0)\n        unless(wp error("{prefix}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {wire} nil)\n        if(equal(minusNet "GND") then\n            gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n            unless(gnd error("{prefix}: cannot create GND for VDC %s.\\n" name))\n            else\n            em=list(car(minus) cadr(minus)-{prefix}_STUB)\n            wm=schCreateWire(cv "route" "full" list(minus em) {wire} {wire} 0)\n            unless(wm error("{prefix}: VDC MINUS wiring failed for %s.\\n" name))\n            schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" {wire} nil)\n        )\n        printf("{prefix}: VDC %s = %sV PLUS=%s MINUS=%s\\n" name value plusNet minusNet)\n        inst\n    )\n)'''
 
-    # Add gndMaster to the generator let binding.
-    if "gndMaster=" not in text:
-        let_match = re.search(r"let\(\(([^\n]*vdcMaster[^\n]*)\)\n", text)
-        if not let_match:
-            return False, "no let binding containing vdcMaster"
-        binding = let_match.group(1)
-        if "gndMaster" not in binding:
-            binding_new = binding.replace("vdcMaster", "vdcMaster gndMaster", 1)
-            text = text[: let_match.start(1)] + binding_new + text[let_match.end(1) :]
+        new_block = block[:body_start] + body + "\n"
+        new_block = new_block.replace(broad_sig,
+            f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)", 1)
+        text = text[:start] + new_block + text[end:]
+        changed = True
 
-    # Add analogLib/gnd beside the existing analogLib/vdc master.
-    if "gndMaster=" not in text:
-        inserted = False
-        open_master = re.search(
-            r'(?m)^(\s*)vdcMaster=([A-Za-z0-9_]+_OpenMaster)\("analogLib" "vdc"\)\s*$',
-            text,
-        )
-        if open_master:
-            indent, opener = open_master.group(1), open_master.group(2)
-            line = f'{indent}gndMaster={opener}("analogLib" "gnd")'
-            text = text[: open_master.end()] + "\n" + line + text[open_master.end() :]
-            inserted = True
-        else:
-            direct_master = re.search(
-                r'(?m)^(\s*)vdcMaster=dbOpenCellViewByType\("analogLib" "vdc" "symbol" "" "r"\)\s*$',
-                text,
-            )
-            if direct_master:
-                indent = direct_master.group(1)
-                line = f'{indent}gndMaster=dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")'
-                text = text[: direct_master.end()] + "\n" + line + text[direct_master.end() :]
-                inserted = True
-        if not inserted:
-            return False, "could not add analogLib/gnd master"
+    # Make every migrated VDC call explicit. A source whose PLUS net is VSS is
+    # the only source that gets direct analogLib/gnd; all others retain VSS on MINUS.
+    def call_repl(match):
+        prefix = match.group(1)
+        args = match.group(2).strip()
+        if args.endswith('"GND"') or args.endswith('"VSS"'):
+            return match.group(0)
+        net_m = re.search(r'"([^"]+)"\s*$', args)
+        if not net_m:
+            raise ValueError(f"{prefix}: cannot determine VDC PLUS net")
+        plus_net = net_m.group(1)
+        minus_net = "GND" if plus_net == "VSS" else "VSS"
+        return f'{prefix}_CreateVDC(cv vdcMaster gndMaster {args} "{minus_net}")'
 
-    call_total = 0
-    for prefix in sorted(set(prefixes)):
-        text, count = re.subn(
-            rf"{re.escape(prefix)}_CreateVDC\(cv vdcMaster ([^\n]*?) \"VSS\"\)",
-            lambda m, p=prefix: f"{p}_CreateVDC(cv vdcMaster gndMaster {m.group(1)})",
-            text,
-        )
-        call_total += count
+    text = re.sub(
+        r'(?m)^\s*(\w+)_CreateVDC\(cv vdcMaster ([^\n]*)\)$',
+        call_repl,
+        text,
+    )
+    changed |= text != original
 
-    if call_total == 0:
-        return False, "no VDC calls with VSS MINUS found"
-
-    path.write_text(text, encoding="utf-8")
-    return text != original, f"{call_total} VDC calls"
+    if changed:
+        path.write_text(text, encoding="utf-8")
+        return True, "VSS-only normalization"
+    return False, "no broad VDC migration found"
 
 
 def validate():
     failures = []
     checked = 0
+
     for path in sorted(ROOT.rglob("*.il")):
         text = path.read_text(encoding="utf-8")
         matches = list(re.finditer(r"procedure\((\w+)_CreateVDC\(", text))
         if not matches:
             continue
         checked += 1
-        if "gndMaster=" not in text:
-            failures.append(f"{path}: gndMaster binding missing")
+
         for match in matches:
             prefix = match.group(1)
-            next_proc = text.find("\nprocedure(", match.end())
-            block = text[match.start() : len(text) if next_proc < 0 else next_proc]
-            if "cv master gndMaster name xy value plusNet" not in block:
-                failures.append(f"{path}: {prefix}_CreateVDC legacy signature remains")
+            end = _block_end(text, match.start())
+            block = text[match.start():end]
+            expected_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
+            if expected_sig not in block:
+                failures.append(f"{path}: {prefix}: non-explicit CreateVDC signature")
+            if 'if(equal(minusNet "GND") then' not in block:
+                failures.append(f"{path}: {prefix}: missing VSS-only GND branch")
+            if "wm=schCreateWire" not in block or "minusNet" not in block:
+                failures.append(f"{path}: {prefix}: legacy non-VSS MINUS wire/label missing")
             if 'strcat(name "_GND")' not in block:
-                failures.append(f"{path}: {prefix}_CreateVDC missing unique GND naming")
-            if 'list(plus ep)' not in block:
-                failures.append(f"{path}: {prefix}_CreateVDC PLUS wire missing")
-            if "wm=schCreateWire" in block or "minusNet" in block:
-                failures.append(f"{path}: {prefix}_CreateVDC still has MINUS wire/label")
-    print(f"Checked {checked} canonical VDC generators")
+                failures.append(f"{path}: {prefix}: unique GND naming missing")
+
+        for call in re.finditer(
+            r'(?m)^\s*(\w+)_CreateVDC\(cv vdcMaster gndMaster ([^\n]*)\)$',
+            text,
+        ):
+            args = call.group(2).strip()
+            nets = re.search(r'"([^"]+)"\s+"([^"]+)"$', args)
+            if not nets:
+                failures.append(f"{path}: malformed VDC call")
+                continue
+            plus_net, minus_net = nets.groups()
+            expected = "GND" if plus_net == "VSS" else "VSS"
+            if minus_net != expected:
+                failures.append(
+                    f"{path}: PLUS={plus_net} must terminate at MINUS={expected}, found {minus_net}"
+                )
+
+    print(f"Checked {checked} canonical VDC generator files")
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return False
-    print("Canonical VSS/GND validation: PASS")
+    print("Canonical VSS-only validation: PASS")
     return True
 
 
@@ -135,22 +128,23 @@ def main():
     changed = []
     skipped = []
     for path in sorted(ROOT.rglob("*.il")):
-        did_change, reason = migrate_file(path)
+        try:
+            did_change, reason = migrate_file(path)
+        except ValueError as exc:
+            did_change, reason = False, str(exc)
         if did_change:
             changed.append(f"{path}: {reason}")
-        elif reason != "no legacy CreateVDC":
+        else:
             skipped.append(f"{path}: {reason}")
 
-    print("MIGRATED:")
+    print("NORMALIZED:")
     for item in changed:
         print(f"  {item}")
     print("SKIPPED:")
     for item in skipped:
         print(f"  {item}")
 
-    if not validate():
-        return 1
-    return 0
+    return 0 if validate() else 1
 
 
 if __name__ == "__main__":
