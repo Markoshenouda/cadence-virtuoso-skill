@@ -31,7 +31,6 @@ def migrate_vdc_procedure(text, match):
     start = match.start()
     end = block_end(text, start)
     block = text[start:end]
-
     if kind == "CreateVDC":
         new_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet minusNet)"
         pinc = f"{prefix}_VDCPinCenter"
@@ -40,11 +39,9 @@ def migrate_vdc_procedure(text, match):
         new_sig = f"procedure({prefix}_VDC(cv master gndMaster name xy plusNet value minusNet)"
         pinc = f"{prefix}_VPin"
         setv = f"{prefix}_SetVDC"
-
     done = new_sig in block and 'if(equal(minusNet "GND") then' in block and 'strcat(name "_GND")' in block and "wm=schCreateWire" in block
     if done:
         return text, False
-
     width = wire_width(text, block, prefix)
     body = f'''{new_sig}
     let((inst gnd plus minus ep em wp wm)
@@ -98,7 +95,7 @@ def parse_vdc_call(rest):
     if len(quoted) < 2:
         raise ValueError("malformed VDC call")
     if quoted[-1] in ("GND", "VSS") and len(quoted) >= 3:
-        plus_net, value, minus_net = quoted[-2], quoted[-3], quoted[-1]
+        plus_net, value, minus_net = quoted[-3], quoted[-2], quoted[-1]
     else:
         plus_net, value = quoted[-2], quoted[-1]
         minus_net = "GND" if plus_net == "VSS" else "VSS"
@@ -107,7 +104,6 @@ def parse_vdc_call(rest):
 
 def migrate_calls(text):
     changed = False
-
     create_pat = re.compile(r'(?m)^(\s*)(\w+)_CreateVDC\(cv vdcMaster(?: gndMaster)?\s+"([^"]+)"\s+([^\n]*)\)$')
 
     def create_repl(m):
@@ -119,7 +115,6 @@ def migrate_calls(text):
         return f'{indent}{prefix}_CreateVDC(cv vdcMaster gndMaster "{name}" "{value}" "{plus_net}" "{minus_net}")'
 
     text = create_pat.sub(create_repl, text)
-
     vdc_pat = re.compile(r'(?m)^(\s*)(\w+)_VDC\(cv vdcMaster(?: gndMaster)?\s+"([^"]+)"\s+([^\n]*)\)$')
 
     def vdc_repl(m):
