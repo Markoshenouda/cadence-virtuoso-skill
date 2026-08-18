@@ -14,52 +14,162 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Migrate Cascode amplifier pair
+      - name: Migrate canonical VDC sources conservatively
         shell: python
         run: |
           from pathlib import Path
           import re
-          targets = [Path('canonical/amplifier/CascodeAmp_NMOS_TotalW_V1_20260817.il'), Path('canonical/amplifier/CascodeAmp_PMOS_TotalW_V1_20260817.il')]
-          changed=[]
-          for path in targets:
-              text=path.read_text(encoding='utf-8')
-              m=re.search(r'procedure\((\w+)_CreateVDC\(cv master name xy value plusNet minusNet\)',text)
-              if not m: raise SystemExit(f'{path}: legacy CreateVDC signature not found')
-              p=m.group(1); old=f'procedure({p}_CreateVDC(cv master name xy value plusNet minusNet)'; new=f'procedure({p}_CreateVDC(cv master gndMaster name xy value plusNet)'
-              start=text.find(old); nxt=text.find('\nprocedure(',start+len(old)); end=len(text) if nxt<0 else nxt; block=text[start:end]
-              body=re.search(r'let\(\(inst plus minus ep em wp wm\)\n.*?printf\("[^"\n]*VDC %s = %sV PLUS=%s MINUS=%s\\n" name value plusNet minusNet\)\n        inst\n    \)\n\)\n',block,re.S)
-              if not body: raise SystemExit(f'{path}: legacy CreateVDC body not found')
-              nb=f'''let((inst gnd plus minus ep wp)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{p}: cannot create VDC %s.\\n" name))\n        {p}_SetVDC(inst value)\n        plus={p}_VDCPinCenter(inst "PLUS")\n        minus={p}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{p}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {p}_WIRE {p}_WIRE 0)\n        unless(wp error("{p}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {p}_WIRE nil)\n        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n        unless(gnd error("{p}: cannot create GND for VDC %s.\\n" name))\n        printf("{p}: VDC %s = %sV PLUS=%s MINUS=GND\\n" name value plusNet)\n        inst\n    )\n)\n'''
-              block=block.replace(old,new,1).replace(body.group(0),nb,1); text=text[:start]+block+text[end:]
-              if 'gndMaster=' not in text:
-                  text,n=re.subn(r'(let\(\(cv [^\n]*?vdcMaster) (pinMaster)',r'\1 gndMaster \2',text,count=1)
-                  if n!=1: raise SystemExit(f'{path}: failed gndMaster let binding')
-              text,n=re.subn(rf'(vdcMaster={re.escape(p)}_OpenMaster\("analogLib" "vdc"\)\n)(\s*)(pinMaster={re.escape(p)}_OpenMaster)',rf'\1        gndMaster={p}_OpenMaster("analogLib" "gnd")\n\2\3',text,count=1)
-              if n!=1: raise SystemExit(f'{path}: failed analogLib/gnd master')
-              text,n=re.subn(rf'{re.escape(p)}_CreateVDC\(cv vdcMaster ([^\n]*?) "VSS"\)',lambda x:f'{p}_CreateVDC(cv vdcMaster gndMaster {x.group(1)})',text)
-              if n==0: raise SystemExit(f'{path}: no VDC call updated')
-              path.write_text(text,encoding='utf-8'); changed.append((str(path),n))
-          print('Migrated:',changed)
 
-      - name: Validate Cascode pair
+          root = Path("canonical")
+          changed = []
+          skipped = []
+
+          for path in sorted(root.rglob("*.il")):
+              text = path.read_text(encoding="utf-8")
+              procedures = list(re.finditer(
+                  r"procedure\((\w+)_CreateVDC\(cv master name xy value plusNet minusNet\)",
+                  text,
+              ))
+              if not procedures:
+                  continue
+
+              original = text
+              for match in reversed(procedures):
+                  prefix = match.group(1)
+                  old_sig = f"procedure({prefix}_CreateVDC(cv master name xy value plusNet minusNet)"
+                  new_sig = f"procedure({prefix}_CreateVDC(cv master gndMaster name xy value plusNet)"
+                  start = match.start()
+                  next_proc = text.find("\nprocedure(", match.end())
+                  end = len(text) if next_proc < 0 else next_proc
+                  block = text[start:end]
+
+                  # Only migrate the known legacy shape. If a generator differs,
+                  # leave it untouched and report it instead of guessing.
+                  if "wm=schCreateWire" not in block or "minusNet" not in block:
+                      skipped.append(f"{path}: legacy CreateVDC shape not recognized")
+                      continue
+
+                  body_match = re.search(
+                      r"let\(\(inst plus minus ep em wp wm\)\n.*?\n        inst\n    \)\n\)\n",
+                      block,
+                      re.S,
+                  )
+                  if not body_match:
+                      skipped.append(f"{path}: legacy CreateVDC body not recognized")
+                      continue
+
+                  body = f'''let((inst gnd plus minus ep wp)\n        inst=dbCreateInst(cv master name xy "R0")\n        unless(inst error("{prefix}: cannot create VDC %s.\\n" name))\n        {prefix}_SetVDC(inst value)\n        plus={prefix}_VDCPinCenter(inst "PLUS")\n        minus={prefix}_VDCPinCenter(inst "MINUS")\n        ep=list(car(plus) cadr(plus)+{prefix}_STUB)\n        wp=schCreateWire(cv "route" "full" list(plus ep) {prefix}_WIRE {prefix}_WIRE 0)\n        unless(wp error("{prefix}: VDC PLUS wiring failed for %s.\\n" name))\n        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" {prefix}_WIRE nil)\n        gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")\n        unless(gnd error("{prefix}: cannot create GND for VDC %s.\\n" name))\n        printf("{prefix}: VDC %s = %sV PLUS=%s MINUS=GND\\n" name value plusNet)\n        inst\n    )\n)\n'''
+
+                  block = block.replace(old_sig, new_sig, 1)
+                  block = block.replace(body_match.group(0), body, 1)
+                  text = text[:start] + block + text[end:]
+
+              if text == original:
+                  continue
+
+              # Add the analogLib/gnd master only when this generator owns an
+              # analogLib/vdc master. Support both canonical OpenMaster styles.
+              if "gndMaster=" not in text:
+                  let_match = re.search(r"let\(\(([^\n]*vdcMaster[^\n]*)\)\n", text)
+                  if not let_match:
+                      skipped.append(f"{path}: no generator let binding containing vdcMaster")
+                      continue
+                  binding = let_match.group(1)
+                  if "gndMaster" not in binding:
+                      binding_new = binding.replace("vdcMaster", "vdcMaster gndMaster", 1)
+                      text = text[:let_match.start(1)] + binding_new + text[let_match.end(1):]
+
+              gnd_inserted = False
+              open_master = re.search(
+                  r'(?m)^(\s*)vdcMaster=([A-Za-z0-9_]+_OpenMaster)\("analogLib" "vdc"\)\s*$',
+                  text,
+              )
+              if open_master:
+                  indent, opener = open_master.group(1), open_master.group(2)
+                  line = f'{indent}gndMaster={opener}("analogLib" "gnd")'
+                  text = text[:open_master.end()] + "\n" + line + text[open_master.end():]
+                  gnd_inserted = True
+              else:
+                  direct_master = re.search(
+                      r'(?m)^(\s*)vdcMaster=dbOpenCellViewByType\("analogLib" "vdc" "symbol" "" "r"\)\s*$',
+                      text,
+                  )
+                  if direct_master:
+                      indent = direct_master.group(1)
+                      line = f'{indent}gndMaster=dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")'
+                      text = text[:direct_master.end()] + "\n" + line + text[direct_master.end():]
+                      gnd_inserted = True
+
+              if not gnd_inserted:
+                  skipped.append(f"{path}: could not add analogLib/gnd master")
+                  continue
+
+              # Update all calls in this file that still pass VSS as MINUS.
+              text, call_count = re.subn(
+                  rf"{re.escape(prefix)}_CreateVDC\(cv vdcMaster ([^\n]*?) \"VSS\"\)",
+                  lambda m: f"{prefix}_CreateVDC(cv vdcMaster gndMaster {m.group(1)})",
+                  text,
+              )
+              if call_count == 0:
+                  skipped.append(f"{path}: no legacy VDC calls updated")
+                  continue
+
+              path.write_text(text, encoding="utf-8")
+              changed.append(f"{path} ({call_count} VDC calls)")
+
+          print("MIGRATED:")
+          for item in changed:
+              print("  " + item)
+          print("SKIPPED:")
+          for item in skipped:
+              print("  " + item)
+
+      - name: Validate every canonical VDC generator
         shell: python
         run: |
           from pathlib import Path
           import re
-          for path in [Path('canonical/amplifier/CascodeAmp_NMOS_TotalW_V1_20260817.il'),Path('canonical/amplifier/CascodeAmp_PMOS_TotalW_V1_20260817.il')]:
-              t=path.read_text(encoding='utf-8'); m=re.search(r'procedure\((\w+)_CreateVDC\(cv master gndMaster name xy value plusNet\).*?(?=\nprocedure\(|\Z)',t,re.S)
-              if not m: raise SystemExit(f'{path}: migrated CreateVDC missing')
-              b=m.group(0)
-              if any(x not in b for x in ['gndMaster','strcat(name "_GND")','list(plus ep)']): raise SystemExit(f'{path}: required GND contract missing')
-              if any(x in b for x in ['minusNet','list(minus em)','wm=schCreateWire']): raise SystemExit(f'{path}: forbidden VSS/minus wire remains')
-          print('Cascode pair validation: PASS')
+
+          failures = []
+          checked = 0
+          for path in sorted(Path("canonical").rglob("*.il")):
+              text = path.read_text(encoding="utf-8")
+              matches = list(re.finditer(r"procedure\((\w+)_CreateVDC\(", text))
+              if not matches:
+                  continue
+              checked += 1
+              for match in matches:
+                  prefix = match.group(1)
+                  next_proc = text.find("\nprocedure(", match.end())
+                  block = text[match.start(): len(text) if next_proc < 0 else next_proc]
+                  if "cv master gndMaster name xy value plusNet" not in block:
+                      failures.append(f"{path}: {prefix}_CreateVDC has legacy signature")
+                  if "strcat(name \"_GND\")" not in block:
+                      failures.append(f"{path}: {prefix}_CreateVDC has no unique GND naming")
+                  if "schCreateWire(cv \"route\" \"full\" list(plus ep)" not in block:
+                      failures.append(f"{path}: PLUS wire missing")
+                  if "wm=schCreateWire" in block or "minusNet" in block:
+                      failures.append(f"{path}: MINUS wire/label contract still present")
+              if "gndMaster=" not in text:
+                  failures.append(f"{path}: gndMaster binding missing")
+
+          print(f"Checked {checked} canonical VDC generator files")
+          if failures:
+              print("VALIDATION FAILURES:")
+              for failure in failures:
+                  print("  " + failure)
+              raise SystemExit(1)
+          print("Canonical VSS/GND validation: PASS")
 
       - name: Commit migration
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add canonical/amplifier/CascodeAmp_NMOS_TotalW_V1_20260817.il canonical/amplifier/CascodeAmp_PMOS_TotalW_V1_20260817.il
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Migrate Cascode amplifier VSS sources to analogLib GND [skip vss-gnd]"
+          git add canonical
+          if git diff --cached --quiet; then
+            echo "No canonical generator changes were required."
+            exit 0
+          fi
+          git commit -m "Migrate canonical VDC MINUS terminals to analogLib GND [skip vss-gnd]"
           git push
