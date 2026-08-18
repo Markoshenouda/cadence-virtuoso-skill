@@ -220,28 +220,31 @@ procedure(CMW_VDCPinCenter(inst pinName)
     )
 )
 
-procedure(CMW_CreateVDC(cv master name xy value plusNet minusNet)
-    let((inst plus minus ep em wp wm)
+procedure(CMW_CreateVDC(cv master gndMaster name xy value plusNet minusNet)
+    let((inst gnd plus minus ep em wp wm)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("CMW: cannot create VDC %s.\n" name))
         CMW_SetVDC(inst value)
         plus=CMW_VDCPinCenter(inst "PLUS")
         minus=CMW_VDCPinCenter(inst "MINUS")
         ep=list(car(plus) cadr(plus)+CMW_STUB)
-        em=list(car(minus) cadr(minus)-CMW_STUB)
         wp=schCreateWire(cv "route" "full" list(plus ep) CMW_WIRE CMW_WIRE 0)
-        wm=schCreateWire(cv "route" "full" list(minus em) CMW_WIRE CMW_WIRE 0)
-        unless(wp && wm error("CMW: VDC wiring failed for %s.\n" name))
+        unless(wp error("CMW: VDC PLUS wiring failed for %s.\n" name))
         schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" CMW_WIRE nil)
-        schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" CMW_WIRE nil)
+        if(equal(minusNet "GND") then
+            gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+            unless(gnd error("CMW: cannot create GND for VDC %s.\n" name))
+            else
+            em=list(car(minus) cadr(minus)-CMW_STUB)
+            wm=schCreateWire(cv "route" "full" list(minus em) CMW_WIRE CMW_WIRE 0)
+            unless(wm error("CMW: VDC MINUS wiring failed for %s.\n" name))
+            schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" CMW_WIRE nil)
+        )
         printf("CMW: VDC %s = %sV PLUS=%s MINUS=%s\n" name value plusNet minusNet)
         inst
     )
 )
 
-;-----------------------------------------------------------------------------
-; External pin helper.
-;-----------------------------------------------------------------------------
 procedure(CMW_CreatePin(cv pinMaster name direction xy)
     let((pin)
         pin=schCreatePin(cv pinMaster name direction nil xy "R0")

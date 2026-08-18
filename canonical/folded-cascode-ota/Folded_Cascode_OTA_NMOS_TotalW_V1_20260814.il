@@ -245,28 +245,31 @@ procedure(FCW_VDCPinCenter(inst pinName)
     )
 )
 
-procedure(FCW_CreateVDC(cv master name xy value plusNet)
-    let((inst plus minus ep em wp wm)
+procedure(FCW_CreateVDC(cv master gndMaster name xy value plusNet minusNet)
+    let((inst gnd plus minus ep em wp wm)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("FCW: cannot create VDC %s.\n" name))
         FCW_SetVDC(inst value)
         plus=FCW_VDCPinCenter(inst "PLUS")
         minus=FCW_VDCPinCenter(inst "MINUS")
         ep=list(car(plus) cadr(plus)+FCW_STUB)
-        em=list(car(minus) cadr(minus)-FCW_STUB)
         wp=schCreateWire(cv "route" "full" list(plus ep) FCW_WIRE FCW_WIRE 0)
-        wm=schCreateWire(cv "route" "full" list(minus em) FCW_WIRE FCW_WIRE 0)
-        unless(wp && wm error("FCW: VDC wiring failed for %s.\n" name))
+        unless(wp error("FCW: VDC PLUS wiring failed for %s.\n" name))
         schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" FCW_WIRE nil)
-        schCreateWireLabel(cv car(wm) em "VSS" "lowerLeft" "R0" "stick" FCW_WIRE nil)
-        printf("FCW: VDC %s = %sV PLUS=%s MINUS=VSS\n" name value plusNet)
+        if(equal(minusNet "GND") then
+            gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+            unless(gnd error("FCW: cannot create GND for VDC %s.\n" name))
+            else
+            em=list(car(minus) cadr(minus)-FCW_STUB)
+            wm=schCreateWire(cv "route" "full" list(minus em) FCW_WIRE FCW_WIRE 0)
+            unless(wm error("FCW: VDC MINUS wiring failed for %s.\n" name))
+            schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" FCW_WIRE nil)
+        )
+        printf("FCW: VDC %s = %sV PLUS=%s MINUS=%s\n" name value plusNet minusNet)
         inst
     )
 )
 
-;-----------------------------------------------------------------------------
-; External pin helper.
-;-----------------------------------------------------------------------------
 procedure(FCW_CreatePin(cv pinMaster name direction xy)
     let((pin)
         pin=schCreatePin(cv pinMaster name direction nil xy "R0")

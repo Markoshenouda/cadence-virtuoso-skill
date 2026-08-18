@@ -208,20 +208,31 @@ procedure(TOTA8_SetVDC(inst value)
 )
 
 ; Create and label a VDC source instance
-procedure(TOTA8_CreateVDC(cv master name xy plusNet minusNet value)
-    let((inst)
+procedure(TOTA8_CreateVDC(cv master gndMaster name xy value plusNet minusNet)
+    let((inst gnd plus minus ep em wp wm)
         inst=dbCreateInst(cv master name xy "R0")
         unless(inst error("TOTA8: cannot create VDC %s.\n" name))
         TOTA8_SetVDC(inst value)
-        TOTA8_LabelVDCTerminal(cv inst "PLUS" plusNet)
-        TOTA8_LabelVDCTerminal(cv inst "MINUS" minusNet)
-        printf("TOTA8: %s DC=%s\n" name value)
-        printf("TOTA8: VDC %s PLUS=%s MINUS=%s VALUE=%s\n" name plusNet minusNet value)
+        plus=TOTA8_VDCPinCenter(inst "PLUS")
+        minus=TOTA8_VDCPinCenter(inst "MINUS")
+        ep=list(car(plus) cadr(plus)+TOTA8_STUB)
+        wp=schCreateWire(cv "route" "full" list(plus ep) 0.0625 0.0625 0)
+        unless(wp error("TOTA8: VDC PLUS wiring failed for %s.\n" name))
+        schCreateWireLabel(cv car(wp) ep plusNet "lowerLeft" "R0" "stick" 0.0625 nil)
+        if(equal(minusNet "GND") then
+            gnd=dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+            unless(gnd error("TOTA8: cannot create GND for VDC %s.\n" name))
+            else
+            em=list(car(minus) cadr(minus)-TOTA8_STUB)
+            wm=schCreateWire(cv "route" "full" list(minus em) 0.0625 0.0625 0)
+            unless(wm error("TOTA8: VDC MINUS wiring failed for %s.\n" name))
+            schCreateWireLabel(cv car(wm) em minusNet "lowerLeft" "R0" "stick" 0.0625 nil)
+        )
+        printf("TOTA8: VDC %s = %sV PLUS=%s MINUS=%s\n" name value plusNet minusNet)
         inst
     )
 )
 
-; Create an output IOPIN
 procedure(TOTA8_CreatePin(cv pinMaster name direction xy)
     let((pin)
         pin=schCreatePin(cv pinMaster name direction nil xy "R0")
@@ -322,14 +333,14 @@ procedure(CreateTelescopicOTA_NMOS_Diff_TotalW_V8_VDC_InputBias_OutputPins_20260
         TOTA8_LabelTerminal(cv M9 "B" "VSS")
 
         ; VDC bias and supply sources
-        TOTA8_CreateVDC(cv vdcMaster "VDD_SRC" -15:10 "VDD" "VSS" "2")
-        TOTA8_CreateVDC(cv vdcMaster "VSS_SRC" -15:6 "VSS" "VSS" "0")
-        TOTA8_CreateVDC(cv vdcMaster "VBN_TAIL_SRC" -15:2 "VBN_TAIL" "VSS" "0.60")
-        TOTA8_CreateVDC(cv vdcMaster "VBN_CAS_SRC" -15:-2 "VBN_CAS" "VSS" "1.05")
-        TOTA8_CreateVDC(cv vdcMaster "VBP_CAS_SRC" 15:2 "VBP_CAS" "VSS" "1.25")
-        TOTA8_CreateVDC(cv vdcMaster "VBP_LOAD_SRC" 15:6 "VBP_LOAD" "VSS" "1.00")
-        TOTA8_CreateVDC(cv vdcMaster "VINP_SRC" -15:-6 "VINP" "VSS" "0.80")
-        TOTA8_CreateVDC(cv vdcMaster "VINN_SRC" 15:-6 "VINN" "VSS" "0.80")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VDD_SRC" "2" "VDD" "VSS")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VSS_SRC" "0" "VSS" "GND")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VBN_TAIL_SRC" "0.60" "VBN_TAIL" "VSS")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VBN_CAS_SRC" "1.05" "VBN_CAS" "VSS")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VBP_CAS_SRC" "1.25" "VBP_CAS" "VSS")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VBP_LOAD_SRC" "1.00" "VBP_LOAD" "VSS")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VINP_SRC" "0.80" "VINP" "VSS")
+        TOTA8_CreateVDC(cv vdcMaster gndMaster "VINN_SRC" "0.80" "VINN" "VSS")
 
         ; Output pins at actual drain-stub endpoints
         TOTA8_CreatePin(cv pinMaster "VOUTP" "output" voutpEnd)
