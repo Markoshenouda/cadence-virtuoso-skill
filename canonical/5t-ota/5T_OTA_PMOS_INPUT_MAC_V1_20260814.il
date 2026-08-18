@@ -34,6 +34,10 @@
 ;   M1/M2 TotalW=4u  L=240n NF=1 M=1
 ;   M3/M4 TotalW=2u  L=480n NF=1 M=1
 ;   M5    TotalW=6u  L=480n NF=1 M=1
+;
+; VSS SOURCE CONTRACT:
+;   VDC PLUS  -> existing wire + net label
+;   VDC MINUS -> direct analogLib/gnd, no wire, no VSS label
 
 setq(T5TW_LIB "tsmcN65")
 (setq T5TW_NCH "nch_mac")
@@ -45,17 +49,12 @@ procedure(T5TW_DeriveW(TotalW NF)
     let((tw nfInt wp)
         tw    = cdfParseFloatString(TotalW)
         nfInt = atoi(NF)
-        unless(nfInt > 0
-            error("T5TW: NF must be >= 1.\n")
-        )
+        unless(nfInt > 0 error("T5TW: NF must be >= 1.\n"))
         wp = tw / float(nfInt)
         sprintf(nil "%g" wp)
     )
 )
 
-;-----------------------------------------------------------------
-; Best-effort numeric coercion for CDF read-back validation.
-;-----------------------------------------------------------------
 procedure(T5TW_ToFloat(val)
     cond(
         (numberp(val) float(val))
@@ -72,7 +71,7 @@ procedure(T5TW_ToFloat(val)
 
 procedure(T5TW_ValueMatches(gotVal expectVal)
     let((gotNum expectNum)
-        gotNum    = T5TW_ToFloat(gotVal)
+        gotNum = T5TW_ToFloat(gotVal)
         expectNum = T5TW_ToFloat(expectVal)
         if(gotNum && expectNum
             then abs(gotNum - expectNum) < 1e-12 * max(1.0 abs(expectNum))
@@ -107,14 +106,14 @@ procedure(T5TW_SetMOS(inst TotalW L NF M)
         cdf->nf->value = NF
         cdf->m->value = M
         printf("T5TW: %s TotalW=%s W/finger=%s L=%s NF=%s M=%s WF=%s totalM=%s\n" inst~>name TotalW WperFinger L NF M cdf->wf->value cdf->totalM->value)
-        unless(T5TW_ValueMatches(cdf->w->value WperFinger) error("T5TW: W mismatch on %s: got %L expected %L.\n" inst~>name cdf->w->value WperFinger))
-        unless(T5TW_ValueMatches(cdf->l->value L) error("T5TW: L mismatch on %s: got %L expected %L.\n" inst~>name cdf->l->value L))
-        unless(T5TW_ValueMatches(cdf->wf->value TotalW) error("T5TW: WF mismatch on %s: got %L expected %L.\n" inst~>name cdf->wf->value TotalW))
-        unless(T5TW_ValueMatches(cdf->fingers->value NF) error("T5TW: fingers mismatch on %s: got %L expected %L.\n" inst~>name cdf->fingers->value NF))
-        unless(T5TW_ValueMatches(cdf->simM->value M) error("T5TW: simM mismatch on %s: got %L expected %L.\n" inst~>name cdf->simM->value M))
-        unless(T5TW_ValueMatches(cdf->totalM->value totalM) error("T5TW: totalM mismatch on %s: got %L expected %L.\n" inst~>name cdf->totalM->value totalM))
-        unless(T5TW_ValueMatches(cdf->nf->value NF) error("T5TW: nf mismatch on %s: got %L expected %L.\n" inst~>name cdf->nf->value NF))
-        unless(T5TW_ValueMatches(cdf->m->value M) error("T5TW: m mismatch on %s: got %L expected %L.\n" inst~>name cdf->m->value M))
+        unless(T5TW_ValueMatches(cdf->w->value WperFinger) error("T5TW: W mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->l->value L) error("T5TW: L mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->wf->value TotalW) error("T5TW: WF mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->fingers->value NF) error("T5TW: fingers mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->simM->value M) error("T5TW: simM mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->totalM->value totalM) error("T5TW: totalM mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->nf->value NF) error("T5TW: nf mismatch on %s.\n" inst~>name))
+        unless(T5TW_ValueMatches(cdf->m->value M) error("T5TW: m mismatch on %s.\n" inst~>name))
         t
     )
 )
@@ -180,29 +179,17 @@ procedure(T5TW_StubEnd(inst pinName)
         d = T5TW_PinCenter(inst "D")
         p = T5TW_PinCenter(inst pinName)
         cond(
-            (equal(pinName "G")
-                dx = car(g) - car(b)
-                dy = cadr(g) - cadr(b))
-            (equal(pinName "B")
-                dx = car(b) - car(g)
-                dy = cadr(b) - cadr(g))
-            (equal(pinName "S")
-                dx = car(s) - car(d)
-                dy = cadr(s) - cadr(d))
-            (equal(pinName "D")
-                dx = car(d) - car(s)
-                dy = cadr(d) - cadr(s))
+            (equal(pinName "G") dx = car(g)-car(b) dy = cadr(g)-cadr(b))
+            (equal(pinName "B") dx = car(b)-car(g) dy = cadr(b)-cadr(g))
+            (equal(pinName "S") dx = car(s)-car(d) dy = cadr(s)-cadr(d))
+            (equal(pinName "D") dx = car(d)-car(s) dy = cadr(d)-cadr(s))
             (t error("T5TW: unsupported terminal %s.\n" pinName))
         )
         absDx = abs(dx)
         absDy = abs(dy)
         if(absDx >= absDy
-            then if(dx < 0.0
-                then list(car(p) - T5TW_STUB cadr(p))
-                else list(car(p) + T5TW_STUB cadr(p)))
-            else if(dy < 0.0
-                then list(car(p) cadr(p) - T5TW_STUB)
-                else list(car(p) cadr(p) + T5TW_STUB))
+            then if(dx < 0.0 then list(car(p)-T5TW_STUB cadr(p)) else list(car(p)+T5TW_STUB cadr(p)))
+            else if(dy < 0.0 then list(car(p) cadr(p)-T5TW_STUB) else list(car(p) cadr(p)+T5TW_STUB))
         )
     )
 )
@@ -214,8 +201,7 @@ procedure(T5TW_Label(cv inst pinName netName)
         w = schCreateWire(cv "route" "full" list(p e) T5TW_W T5TW_W 0)
         unless(w error("T5TW: wire failed on %s.%s.\n" inst~>name pinName))
         l = schCreateWireLabel(cv car(w) e netName "lowerLeft" "R0" "stick" T5TW_W nil)
-        unless(l error("T5TW: label failed on %s.%s.\n" inst~>name pinName))
-        l
+        unless(l error("T5TW: label failed on %s.%s.\n" inst~>name pinName)) l
     )
 )
 
@@ -237,18 +223,18 @@ procedure(T5TW_VPin(inst name)
     )
 )
 
-procedure(T5TW_VDC(cv master name xy netName value)
-    let((inst plus minus ep em wp wm)
+procedure(T5TW_VDC(cv master gndMaster name xy netName value)
+    let((inst plus minus ep wp gnd)
         inst = dbCreateInst(cv master name xy "R0")
         T5TW_SetVDC(inst value)
         plus = T5TW_VPin(inst "PLUS")
         minus = T5TW_VPin(inst "MINUS")
         ep = list(car(plus) cadr(plus) + T5TW_STUB)
-        em = list(car(minus) cadr(minus) - T5TW_STUB)
         wp = schCreateWire(cv "route" "full" list(plus ep) T5TW_W T5TW_W 0)
-        wm = schCreateWire(cv "route" "full" list(minus em) T5TW_W T5TW_W 0)
+        unless(wp error("T5TW: PLUS wire failed %s.\n" name))
         schCreateWireLabel(cv car(wp) ep netName "lowerLeft" "R0" "stick" T5TW_W nil)
-        schCreateWireLabel(cv car(wm) em "VSS" "lowerLeft" "R0" "stick" T5TW_W nil)
+        gnd = dbCreateInst(cv gndMaster strcat(name "_GND") minus "R0")
+        unless(gnd error("T5TW: GND creation failed %s.\n" name))
         inst
     )
 )
@@ -258,7 +244,7 @@ procedure(T5TW_Pin(cv pinMaster netName direction xy)
 )
 
 procedure(Create5TOTA_PMOSIN_MAC_V1_20260814()
-    let((cv nmos pmos pinMaster vdcMaster M1 M2 M3 M4 M5)
+    let((cv nmos pmos pinMaster vdcMaster gndMaster M1 M2 M3 M4 M5)
         cv = geGetEditCellView()
         unless(cv error("T5TW: open an EMPTY editable schematic first.\n"))
         nmos = dbOpenCellViewByType(T5TW_LIB T5TW_NCH "symbol" "" "r")
@@ -267,36 +253,27 @@ procedure(Create5TOTA_PMOSIN_MAC_V1_20260814()
         unless(pmos error("T5TW: cannot open %s/%s/symbol.\n" T5TW_LIB T5TW_PCH))
         pinMaster = dbOpenCellViewByType("basic" "iopin" "symbol" "" "r")
         vdcMaster = dbOpenCellViewByType("analogLib" "vdc" "symbol" "" "r")
+        gndMaster = dbOpenCellViewByType("analogLib" "gnd" "symbol" "" "r")
 
-        ; --- PMOS input pair (source-top verified by orientation search) ---
         M1 = T5TW_PlaceVerifiedPMOS(cv pmos "M1" 0:6 "4u" "240n" "1" "1")
         M2 = T5TW_PlaceVerifiedPMOS(cv pmos "M2" 6:6 "4u" "240n" "1" "1")
-
-        ; --- PMOS tail source (source-top verified by orientation search) ---
         M5 = T5TW_PlaceVerifiedPMOS(cv pmos "M5" 3:10 "6u" "480n" "1" "1")
-
-        ; --- NMOS current-mirror load ---
         M3 = T5TW_Place(cv nmos "M3" 0:2 "2u" "480n" "1" "1" "R0")
         M4 = T5TW_Place(cv nmos "M4" 6:2 "2u" "480n" "1" "1" "R0")
 
-        ; --- Terminal labels (isolated stubs, repeated-label connectivity) ---
-        T5TW_Label(cv M1 "G" "VINP")     T5TW_Label(cv M1 "D" "MIRROR")   T5TW_Label(cv M1 "S" "TAIL")  T5TW_Label(cv M1 "B" "VDD")
-        T5TW_Label(cv M2 "G" "VINN")     T5TW_Label(cv M2 "D" "VOUT")     T5TW_Label(cv M2 "S" "TAIL")  T5TW_Label(cv M2 "B" "VDD")
-        T5TW_Label(cv M5 "G" "VBP_TAIL") T5TW_Label(cv M5 "D" "TAIL")     T5TW_Label(cv M5 "S" "VDD")   T5TW_Label(cv M5 "B" "VDD")
-        T5TW_Label(cv M3 "G" "MIRROR")   T5TW_Label(cv M3 "D" "MIRROR")   T5TW_Label(cv M3 "S" "VSS")   T5TW_Label(cv M3 "B" "VSS")
-        T5TW_Label(cv M4 "G" "MIRROR")   T5TW_Label(cv M4 "D" "VOUT")     T5TW_Label(cv M4 "S" "VSS")   T5TW_Label(cv M4 "B" "VSS")
+        T5TW_Label(cv M1 "G" "VINP") T5TW_Label(cv M1 "D" "MIRROR") T5TW_Label(cv M1 "S" "TAIL") T5TW_Label(cv M1 "B" "VDD")
+        T5TW_Label(cv M2 "G" "VINN") T5TW_Label(cv M2 "D" "VOUT") T5TW_Label(cv M2 "S" "TAIL") T5TW_Label(cv M2 "B" "VDD")
+        T5TW_Label(cv M5 "G" "VBP_TAIL") T5TW_Label(cv M5 "D" "TAIL") T5TW_Label(cv M5 "S" "VDD") T5TW_Label(cv M5 "B" "VDD")
+        T5TW_Label(cv M3 "G" "MIRROR") T5TW_Label(cv M3 "D" "MIRROR") T5TW_Label(cv M3 "S" "VSS") T5TW_Label(cv M3 "B" "VSS")
+        T5TW_Label(cv M4 "G" "MIRROR") T5TW_Label(cv M4 "D" "VOUT") T5TW_Label(cv M4 "S" "VSS") T5TW_Label(cv M4 "B" "VSS")
 
-        ; --- External output pin ---
         T5TW_Pin(cv pinMaster "VOUT" "output" 9:4)
+        T5TW_VDC(cv vdcMaster gndMaster "V_VDD"      12:14 "VDD"      "1.2")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VBP_TAIL" 12:9  "VBP_TAIL" "0.6")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VINP"     12:4  "VINP"     "0.6")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VINN"     12:-1 "VINN"     "0.6")
+        T5TW_VDC(cv vdcMaster gndMaster "V_VSS"      18:4  "VSS"      "0.0")
 
-        ; --- Bias / supply sources ---
-        T5TW_VDC(cv vdcMaster "V_VDD"      12:14 "VDD"      "1.2")
-        T5TW_VDC(cv vdcMaster "V_VBP_TAIL" 12:9  "VBP_TAIL" "0.6")
-        T5TW_VDC(cv vdcMaster "V_VINP"     12:4  "VINP"     "0.6")
-        T5TW_VDC(cv vdcMaster "V_VINN"     12:-1 "VINN"     "0.6")
-        T5TW_VDC(cv vdcMaster "V_VSS"      18:4  "VSS"      "0.0")
-
-        ; --- Re-verify PMOS orientation after all placements ---
         unless(T5TW_PMOSPass(M1) error("T5TW: M1 orientation failed.\n"))
         unless(T5TW_PMOSPass(M2) error("T5TW: M2 orientation failed.\n"))
         unless(T5TW_PMOSPass(M5) error("T5TW: M5 orientation failed.\n"))
