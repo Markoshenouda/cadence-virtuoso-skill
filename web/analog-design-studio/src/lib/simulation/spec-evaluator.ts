@@ -42,18 +42,23 @@ function marginFor(value: number, operator: string, target: number): number {
 }
 
 /** Unit conversion between registry spec units and raw simulator units. */
-const UNIT_SCALES: Record<string, number> = { uA: 1e6, mS: 1e3, MHz: 1e-6, 'V/us': 1e-6, mW: 1e3 };
+const UNIT_SCALES: Record<string, number> = {
+  uA: 1e6, mS: 1e3, MHz: 1e-6, 'V/us': 1e-6, mW: 1e3,
+  pF: 1e12, fF: 1e15, nF: 1e9, uF: 1e6,
+  kOhm: 1e-3, MOhm: 1e-6, Ohm: 1, '%': 1,
+};
 
 const METRIC_UNITS: Record<string, string> = {
   power: 'W', gain: 'dB', gbw: 'Hz', phaseMargin: 'deg', slewRate: 'V/s',
-  iref: 'A', iout: 'A', tailCurrent: 'A', ratio: '',
+  iref: 'A', iout: 'A', tailCurrent: 'A', ratio: '', load: 'F', compliance: 'V',
+  rout: 'Ohm', matching: '%',
 };
 
 function analysisForMetric(metric: string): string {
-  if (['power', 'iref', 'iout', 'ratio', 'tailCurrent', 'idp', 'idn', 'vref', 'vout', 'voutp', 'voutn'].includes(metric)) return 'dc';
-  if (['gain', 'gbw', 'phaseMargin'].includes(metric)) return 'ac';
+  if (['power', 'iref', 'iout', 'ratio', 'tailCurrent', 'idp', 'idn', 'vref', 'vout', 'voutp', 'voutn', 'compliance', 'rout', 'matching'].includes(metric)) return 'dc';
+  if (['gain', 'gbw', 'phaseMargin', 'load'].includes(metric)) return 'ac';
   if (metric === 'slewRate') return 'tran';
-  return 'unknown';
+  return 'dc';
 }
 
 /**

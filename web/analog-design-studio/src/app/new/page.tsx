@@ -1,8 +1,9 @@
 'use client';
 
 import React, { Suspense, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { SimulationSessionStore } from '@/lib/simulation/simulation-session';
 import {
   ArrowRight,
   Check,
@@ -868,10 +869,23 @@ function ResultScreen({
   config: DesignConfig;
   onBack: () => void;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [cadenceBusy, setCadenceBusy] = useState(false);
   const [simBusy, setSimBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleContinueToSimulation() {
+    const session = SimulationSessionStore.createSession(
+      config.circuitId,
+      config.topologyId,
+      config.technologyId,
+      topology.name,
+      topology.generator.path,
+      config
+    );
+    router.push(`/simulation/${session.id}`);
+  }
   const [cadenceError, setCadenceError] = useState<string | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
   const [generatedName, setGeneratedName] = useState<string | null>(null);
@@ -1011,6 +1025,16 @@ function ResultScreen({
           <button
             type="button"
             className={styles.actionBtnPrimary}
+            onClick={handleContinueToSimulation}
+            style={{ background: 'linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%)' }}
+          >
+            <Sparkles size={15} />
+            <span>Continue to Simulation Workspace →</span>
+          </button>
+
+          <button
+            type="button"
+            className={styles.actionBtnSecondary}
             onClick={generate}
             disabled={busy}
           >

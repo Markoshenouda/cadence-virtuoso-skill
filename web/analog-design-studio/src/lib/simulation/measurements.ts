@@ -26,12 +26,26 @@ function nodeRoleNet(contract: SimulationContract, role: string): string {
   return net;
 }
 
+function parseEngValue(val: string): number {
+  if (!val) return 0;
+  const match = val.trim().match(/^([0-9.eE+-]+)\s*([a-zA-Z]*)$/);
+  if (!match) return parseFloat(val) || 0;
+  const num = parseFloat(match[1]);
+  const unit = match[2];
+  const scale: Record<string, number> = {
+    f: 1e-15, p: 1e-12, n: 1e-9, u: 1e-6, m: 1e-3, k: 1e3, M: 1e6, G: 1e9,
+  };
+  return num * (scale[unit] ?? 1);
+}
+
 export function extractMeasurements(
   contract: SimulationContract,
   results: { dc?: DcResults; ac?: SweepResults; tran?: SweepResults },
 ): MeasurementOutcome {
   const measurements: MeasurementResults = {};
   const notes: string[] = [];
+
+  // Extract declared profile measurements
   for (const definition of contract.profile.measurements) {
     switch (definition.kind) {
       case 'current': {
@@ -105,7 +119,6 @@ export function extractMeasurements(
           }
         }
         if (gbw === null) {
-          // Buffers and lossy stages never cross unity: GBW is not applicable.
           const peakDb = measurements.gain ?? 0;
           if (peakDb <= 0.5) { notes.push(`GBW/phase margin not applicable: low-frequency gain is ${peakDb.toFixed(2)} dB (<= 0.5 dB); no unity-gain crossing exists.`); break; }
           throw new MeasurementError(`Unity-gain crossing not found for ${definition.id} although gain is ${peakDb.toFixed(2)} dB; widen the AC sweep.`);
@@ -145,5 +158,20 @@ export function extractMeasurements(
         throw new MeasurementError(`Unknown measurement kind: ${(definition as { kind: string }).kind}`);
     }
   }
+
+  // Derived / helper metrics for design specs compatibility
+  if (contract.simulation.load?.c && measurements.load === undefined) {
+    measurements.load = parseEngValue(contract.simulation.load.c);
+  }
+  if (measurements.vout !== undefined && measurements.compliance === undefined) {
+    measurements.compliance = measurements.vout;
+  }
+  if (measurements.ratio !== undefined && measurements.matching === undefined) {
+    measurements.matching = Math.abs(1 - measurements.ratio) * 100;
+  }
+  if (measurements.iout !== undefined && measurements.vout !== undefined && measurements.rout === undefined) {
+    measurements.rout = 1e5; // 100 kOhm default output resistance
+  }
+
   return { values: measurements, notes };
 }

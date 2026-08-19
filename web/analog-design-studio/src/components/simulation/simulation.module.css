@@ -1,0 +1,621 @@
+/* Simulation Studio CSS Module */
+
+.wizardContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.wizardHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.wizardMetaTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.designInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topologyBadge {
+  background-color: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-bright);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+}
+
+.techTag {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+/* Stepper */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  flex-shrink: 0;
+}
+
+.stepItem:hover {
+  background-color: var(--bg-hover);
+}
+
+.stepActive {
+  background-color: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.stepCompleted {
+  border-color: var(--success-border);
+}
+
+.stepNum {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--bg-panel-raised);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepActive .stepNum {
+  background-color: var(--accent);
+  color: #ffffff;
+}
+
+.stepCompleted .stepNum {
+  background-color: var(--success);
+  color: #000000;
+}
+
+.stepLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.stepActive .stepLabel {
+  color: var(--accent-bright);
+}
+
+.stepCompleted .stepLabel {
+  color: var(--text-primary);
+}
+
+.stepArrow {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* Wizard Body */
+.wizardBody {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.stepTitleGroup {
+  margin-bottom: 20px;
+}
+
+.stepTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.stepSub {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Card Grid for Step 1 */
+.typeCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.typeCard {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  transition: all var(--dur-normal) var(--ease);
+}
+
+.typeCard:hover {
+  border-color: var(--border-strong);
+  background-color: var(--bg-card-hover);
+  transform: translateY(-1px);
+}
+
+.typeCardSelected {
+  border-color: var(--accent);
+  background-color: var(--accent-bg);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.typeCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.typeCardTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.typeCardIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-panel-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.typeCardTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.typeCardCategory {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.typeCardDesc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.typeCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background-color: var(--bg-sunken);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+}
+
+.typeCardListItem {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typeCardListItemDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--accent);
+}
+
+/* Config Step 2 */
+.configSections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+.configCard {
+  background-color: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.configCardTitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.formUnit {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.formInput, .formSelect {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  width: 100%;
+}
+
+.formInput:focus, .formSelect:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Outputs Step 3 */
+.outputsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.outputCheckboxCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.outputCheckboxCard:hover {
+  border-color: var(--border-strong);
+}
+
+.outputCheckboxCardActive {
+  border-color: var(--accent);
+  background-color: var(--accent-bg);
+}
+
+.outputInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.outputName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.outputDesc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.outputUnit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  background-color: var(--bg-panel-raised);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+}
+
+/* Specs Step 4 */
+.specList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.specRow {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 40px;
+  gap: 10px;
+  align-items: center;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
+.specHeaderRow {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 40px;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  padding: 0 14px 6px 14px;
+}
+
+.addSpecBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-bright);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  margin-top: 12px;
+}
+
+.addSpecBtn:hover {
+  background-color: var(--accent-bg-hover);
+}
+
+/* Actions Footer */
+.wizardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 24px;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-panel-raised);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+}
+
+.backBtn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nextBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
+  border: 1px solid var(--accent-border);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.nextBtn:hover {
+  filter: brightness(1.1);
+}
+
+/* Results Dashboard */
+.resultsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.resultsHeader {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+}
+
+.statusBadgePass {
+  background-color: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+}
+
+.statusBadgeFail {
+  background-color: var(--fail-bg);
+  border: 1px solid var(--fail-border);
+  color: var(--fail-text);
+}
+
+.statusBadgeDisabled {
+  background-color: var(--candidate-bg);
+  border: 1px solid var(--candidate-border);
+  color: var(--candidate-text);
+}
+
+.tabsBar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.tabItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tabItemActive {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-sunken);
+}
+
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.passTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.failTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fail);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.plotContainer {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.plotSvg {
+  width: 100%;
+  height: 280px;
+  background-color: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.plotGridLine {
+  stroke: var(--border-subtle);
+  stroke-dasharray: 4;
+}
+
+.plotTracePath {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.plotPhasePath {
+  fill: none;
+  stroke: #f472b6;
+  stroke-width: 2;
+}
